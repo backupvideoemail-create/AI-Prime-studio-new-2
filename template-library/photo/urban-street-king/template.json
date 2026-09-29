@@ -1,0 +1,26 @@
+{
+  "id": "urban-street-king",
+  "type": "photo",
+  "name": "Urban Street King",
+  "category": "trending",
+  "subCategory": "Streetwear",
+  "gender": "male",
+  "description": "Raw city street vibe with oversized streetwear, retro chunky sneakers, and confident urban king demeanor.",
+  "badge": "🔥 Street King",
+  "previewPath": "/template-library/photo/urban-street-king/preview.jpg",
+  "beforePath": "/template-library/photo/urban-street-king/before.jpg",
+  "afterPath": "/template-library/photo/urban-street-king/after.jpg",
+  "prompt": "Urban street king portrait on Mumbai promenade, oversized streetwear jacket, vintage shades, golden hour bokeh",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 14,
+  "isActive": true,
+  "likesCount": 39100,
+  "tags": [
+    "streetwear",
+    "street king",
+    "urban",
+    "boys",
+    "oversized"
+  ]
+}

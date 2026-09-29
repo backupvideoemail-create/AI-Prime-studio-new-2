@@ -1,0 +1,27 @@
+{
+  "id": "cricket-matchday-portrait",
+  "type": "photo",
+  "name": "Cricket Matchday Portrait",
+  "category": "fitness",
+  "subCategory": "Sports & Motorsport",
+  "gender": "male",
+  "description": "Heroic cricket athlete portrait under floodlights with official jersey look and roaring stadium atmosphere.",
+  "badge": "🏏 Cricket Star",
+  "previewPath": "/template-library/photo/cricket-matchday-portrait/preview.jpg",
+  "beforePath": "/template-library/photo/cricket-matchday-portrait/before.jpg",
+  "afterPath": "/template-library/photo/cricket-matchday-portrait/after.jpg",
+  "prompt": "Indian cricket athlete hero portrait under bright stadium floodlights, national athletic jersey, mist and bokeh",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 15,
+  "isActive": true,
+  "likesCount": 62800,
+  "tags": [
+    "cricket",
+    "sports",
+    "matchday",
+    "athlete",
+    "stadium",
+    "boys"
+  ]
+}

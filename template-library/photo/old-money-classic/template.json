@@ -1,0 +1,26 @@
+{
+  "id": "old-money-classic",
+  "type": "photo",
+  "name": "Old-Money Classic",
+  "category": "fashion",
+  "subCategory": "Luxury & Rich Look",
+  "gender": "female",
+  "description": "Timeless quiet luxury aesthetic featuring cream cashmere knit, vintage polo club lawn, and aristocratic poise.",
+  "badge": "Old Money",
+  "previewPath": "/template-library/photo/old-money-classic/preview.jpg",
+  "beforePath": "/template-library/photo/old-money-classic/before.jpg",
+  "afterPath": "/template-library/photo/old-money-classic/after.jpg",
+  "prompt": "Old-money quiet luxury female aesthetic portrait, cream cashmere sweater, heritage country club estate, soft afternoon natural light",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 17,
+  "isActive": true,
+  "likesCount": 41800,
+  "tags": [
+    "old money",
+    "classic",
+    "luxury",
+    "girls",
+    "quiet luxury"
+  ]
+}

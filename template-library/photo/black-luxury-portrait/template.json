@@ -1,0 +1,27 @@
+{
+  "id": "black-luxury-portrait",
+  "type": "photo",
+  "name": "Black Luxury Portrait",
+  "category": "royal",
+  "subCategory": "Luxury & Rich Look",
+  "gender": "male",
+  "description": "Jet black silk background with rim lighting, tailored bespoke black tuxedo, and subtle golden highlights.",
+  "badge": "👑 Billionaire",
+  "previewPath": "/template-library/photo/black-luxury-portrait/preview.jpg",
+  "beforePath": "/template-library/photo/black-luxury-portrait/before.jpg",
+  "afterPath": "/template-library/photo/black-luxury-portrait/after.jpg",
+  "prompt": "Ultra-luxury black portrait photography, tailored jet black designer tuxedo, subtle warm gold rim light, cinematic studio bokeh",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 1,
+  "isActive": true,
+  "likesCount": 38400,
+  "tags": [
+    "luxury",
+    "black suit",
+    "rich look",
+    "boys",
+    "men",
+    "gold lighting"
+  ]
+}

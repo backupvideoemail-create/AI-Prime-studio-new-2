@@ -1,0 +1,26 @@
+{
+  "id": "penthouse-night-portrait",
+  "type": "photo",
+  "name": "Penthouse Night Portrait",
+  "category": "creative",
+  "subCategory": "Luxury & Rich Look",
+  "gender": "male",
+  "description": "Private penthouse balcony overlooking an illuminated neon cityscape at midnight with designer casual blazer.",
+  "badge": "🌃 Penthouse",
+  "previewPath": "/template-library/photo/penthouse-night-portrait/preview.jpg",
+  "beforePath": "/template-library/photo/penthouse-night-portrait/before.jpg",
+  "afterPath": "/template-library/photo/penthouse-night-portrait/after.jpg",
+  "prompt": "Ultra-luxury penthouse balcony portrait at midnight, panoramic glass city skyline, warm architectural lighting, bespoke turtleneck",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 4,
+  "isActive": true,
+  "likesCount": 46200,
+  "tags": [
+    "penthouse",
+    "night",
+    "balcony",
+    "cityscape",
+    "boys"
+  ]
+}

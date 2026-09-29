@@ -1,0 +1,26 @@
+{
+  "id": "sabyasachi-palace-bride",
+  "type": "photo",
+  "name": "Royal Sabyasachi Palace Bride",
+  "category": "wedding",
+  "subCategory": "Wedding & Groom",
+  "gender": "female",
+  "description": "Majestic crimson red bridal lehenga with heavy antique gold zardozi embroidery and royal polki diamond choker.",
+  "badge": "👰 Royal Bride",
+  "previewPath": "/template-library/photo/sabyasachi-palace-bride/preview.jpg",
+  "beforePath": "/template-library/photo/sabyasachi-palace-bride/before.jpg",
+  "afterPath": "/template-library/photo/sabyasachi-palace-bride/after.jpg",
+  "prompt": "Regal Indian bride portrait in grand palace courtyard, ruby red and antique gold zardozi embroidered lehenga, uncut diamond polki",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 12,
+  "isActive": true,
+  "likesCount": 65100,
+  "tags": [
+    "wedding",
+    "bride",
+    "lehenga",
+    "sabyasachi",
+    "royal"
+  ]
+}

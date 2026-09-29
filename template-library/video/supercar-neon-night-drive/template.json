@@ -1,0 +1,25 @@
+{
+  "id": "supercar-neon-night-drive",
+  "type": "video",
+  "name": "Supercar Neon Midnight Chase",
+  "category": "video_to_video",
+  "subCategory": "Video-to-Video Restyling",
+  "description": "Transform regular street driving footage into a fast & furious neon cyber chase with ultra-glossy lighting reflections.",
+  "badge": "🏎️ Neon Chase",
+  "previewPath": "/template-library/video/supercar-neon-night-drive/cover.jpg",
+  "coverPath": "/template-library/video/supercar-neon-night-drive/cover.jpg",
+  "videoPath": "https://assets.mixkit.co/videos/preview/mixkit-traffic-at-night-in-a-big-city-4315-large.mp4",
+  "prompt": "Midnight Dubai neon highway supercar chase, wet asphalt neon reflections, dynamic motion blur, 4K cinematic 60fps",
+  "creditCost": 140,
+  "featured": true,
+  "sortPriority": 3,
+  "isActive": true,
+  "likesCount": 64900,
+  "tags": [
+    "supercar",
+    "video to video",
+    "neon",
+    "night drive",
+    "chase"
+  ]
+}

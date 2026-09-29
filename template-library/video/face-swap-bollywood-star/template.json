@@ -1,0 +1,25 @@
+{
+  "id": "face-swap-bollywood-star",
+  "type": "video",
+  "name": "Bollywood Star Face-Swap Video",
+  "category": "face_swap",
+  "subCategory": "Face Swap Video (Photo to Video)",
+  "description": "Swap your normal facial photo into a high-octane Bollywood cinematic slow-motion video. Seamless neural face blending.",
+  "badge": "🎭 Viral Face Swap",
+  "previewPath": "/template-library/video/face-swap-bollywood-star/cover.jpg",
+  "coverPath": "/template-library/video/face-swap-bollywood-star/cover.jpg",
+  "videoPath": "https://assets.mixkit.co/videos/preview/mixkit-fashion-model-in-neon-lights-39878-large.mp4",
+  "prompt": "High fidelity face swap into royal Bollywood wedding hero entry video, cinematic slow motion, golden firework bokeh",
+  "creditCost": 150,
+  "featured": true,
+  "sortPriority": 1,
+  "isActive": true,
+  "likesCount": 88400,
+  "tags": [
+    "face swap",
+    "bollywood",
+    "video",
+    "photo to video",
+    "slow motion"
+  ]
+}

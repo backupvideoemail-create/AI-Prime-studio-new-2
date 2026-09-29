@@ -1,0 +1,26 @@
+{
+  "id": "haute-couture-vogue",
+  "type": "photo",
+  "name": "Haute Couture Vogue Cover",
+  "category": "fashion",
+  "subCategory": "Artistic & AI Transformation",
+  "gender": "female",
+  "description": "Front-cover editorial studio portrait with striking directional beauty dish lighting and emerald gown.",
+  "badge": "Vogue Cover",
+  "previewPath": "/template-library/photo/haute-couture-vogue/preview.jpg",
+  "beforePath": "/template-library/photo/haute-couture-vogue/before.jpg",
+  "afterPath": "/template-library/photo/haute-couture-vogue/after.jpg",
+  "prompt": "Vogue magazine cover fashion editorial portrait, high contrast beauty dish studio lighting, designer emerald green gown",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 7,
+  "isActive": true,
+  "likesCount": 47200,
+  "tags": [
+    "vogue",
+    "editorial",
+    "haute couture",
+    "fashion",
+    "magazine"
+  ]
+}

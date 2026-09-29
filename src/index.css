@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-heading: 'Cinzel', serif;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: #07080a;
+    color: #e5e7eb;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-brand {
+    letter-spacing: -0.015em;
+  }
+}
+
+/* Custom metallic gold & cinematic styles */
+.font-cinzel {
+  font-family: 'Cinzel', serif;
+}
+
+.font-script {
+  font-family: 'Dancing Script', cursive;
+}
+
+.text-gold {
+  color: #d4af37;
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, #fff3c4 0%, #e0bc5c 40%, #b8860b 80%, #ffd700 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gold-subtle {
+  background: linear-gradient(135deg, #f3e5ab 0%, #c9a039 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-gold-gradient {
+  background: linear-gradient(135deg, #f5d77f 0%, #d4af37 50%, #aa7c11 100%);
+}
+
+.bg-gold-gradient-hover:hover {
+  background: linear-gradient(135deg, #fceda7 0%, #e5c055 50%, #bf8d18 100%);
+}
+
+.bg-dark-card {
+  background-color: #0d0f14;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.bg-dark-card:hover {
+  border-color: rgba(212, 175, 55, 0.25);
+}
+
+.gold-border-glow {
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.18);
+}
+
+.gold-subtle-glow {
+  box-shadow: 0 4px 20px -2px rgba(212, 175, 55, 0.12);
+}
+
+/* Safe area support for mobile bottom bars */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 5rem);
+}
+
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Hide scrollbar for category tabs */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* AI CLUB Logo Premium Shimmer & Breathing Aura (Subtle & Elegant) */
+@keyframes logoShimmer {
+  0% {
+    transform: translateX(-160%) skewX(-20deg);
+  }
+  35%, 100% {
+    transform: translateX(260%) skewX(-20deg);
+  }
+}
+
+@keyframes logoAura {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.22), 0 0 2px rgba(245, 215, 127, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(212, 175, 55, 0.45), 0 0 6px rgba(255, 232, 148, 0.35);
+  }
+}
+
+@keyframes sparklePulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 2px rgba(252, 237, 167, 0.35));
+  }
+  50% {
+    transform: scale(1.1) rotate(6deg);
+    filter: drop-shadow(0 0 6px rgba(252, 237, 167, 0.8));
+  }
+}
+
+@keyframes goldTextShine {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.animate-logo-aura {
+  animation: logoAura 3.8s ease-in-out infinite;
+}
+
+.animate-logo-shimmer {
+  animation: logoShimmer 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-sparkle-pulse {
+  animation: sparklePulse 3.4s ease-in-out infinite;
+}
+
+.text-gold-shine {
+  background: linear-gradient(
+    110deg,
+    #ffe894 0%,
+    #d4af37 30%,
+    #ffffff 50%,
+    #d4af37 70%,
+    #aa7c11 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: goldTextShine 7s linear infinite;
+}

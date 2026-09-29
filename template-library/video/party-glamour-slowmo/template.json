@@ -1,0 +1,25 @@
+{
+  "id": "party-glamour-slowmo",
+  "type": "video",
+  "name": "Party Glamour VIP Slow-Mo",
+  "category": "image_to_video",
+  "subCategory": "Image to Video Motion",
+  "description": "Bring any glamorous party photo to life with slow-motion champagne toast, glittering lights, and joyful smiles.",
+  "badge": "✨ VIP Party",
+  "previewPath": "/template-library/video/party-glamour-slowmo/cover.jpg",
+  "coverPath": "/template-library/video/party-glamour-slowmo/cover.jpg",
+  "videoPath": "https://assets.mixkit.co/videos/preview/mixkit-hands-holding-champagne-glasses-and-toasting-at-a-party-41712-large.mp4",
+  "prompt": "Ultra-luxurious VIP lounge party, slow-motion golden confetti falling, soft bokeh lights, stylish toast",
+  "creditCost": 120,
+  "featured": false,
+  "sortPriority": 5,
+  "isActive": true,
+  "likesCount": 48700,
+  "tags": [
+    "party",
+    "image to video",
+    "slow motion",
+    "vip",
+    "champagne"
+  ]
+}

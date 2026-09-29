@@ -1,0 +1,27 @@
+{
+  "id": "black-suit-gold-lighting",
+  "type": "photo",
+  "name": "Black Suit — Gold Lighting",
+  "category": "royal",
+  "subCategory": "Luxury & Rich Look",
+  "gender": "male",
+  "description": "Editorial black suit styling illuminated by warm honey-gold volumetric light with high-end supercar backdrop.",
+  "badge": "💎 Gold Light",
+  "previewPath": "/template-library/photo/black-suit-gold-lighting/preview.jpg",
+  "beforePath": "/template-library/photo/black-suit-gold-lighting/before.jpg",
+  "afterPath": "/template-library/photo/black-suit-gold-lighting/after.jpg",
+  "prompt": "High fashion editorial male portrait in bespoke black three-piece suit, amber gold rim lighting, exotic matte black supercar background, 85mm lens",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 10,
+  "isActive": true,
+  "likesCount": 42100,
+  "tags": [
+    "black suit",
+    "gold lighting",
+    "boys",
+    "luxury",
+    "supercar",
+    "men"
+  ]
+}

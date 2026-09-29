@@ -1,0 +1,27 @@
+{
+  "id": "goa-beach-sunset",
+  "type": "photo",
+  "name": "Goa Beach Sunset",
+  "category": "travel",
+  "subCategory": "Lifestyle & Location",
+  "gender": "female",
+  "description": "Warm golden sunset on Goa beach, palm trees gently swaying, gentle ocean surf, and relaxed vacation style.",
+  "badge": "🏖️ Goa Beach",
+  "previewPath": "/template-library/photo/goa-beach-sunset/preview.jpg",
+  "beforePath": "/template-library/photo/goa-beach-sunset/before.jpg",
+  "afterPath": "/template-library/photo/goa-beach-sunset/after.jpg",
+  "prompt": "Standing on Goa beach during sunset, golden hour warm rim light, gentle ocean waves crashing, relaxed coastal vacation outfit",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 9,
+  "isActive": true,
+  "likesCount": 71200,
+  "tags": [
+    "goa beach",
+    "beach",
+    "sunset",
+    "vacation",
+    "travel",
+    "location"
+  ]
+}

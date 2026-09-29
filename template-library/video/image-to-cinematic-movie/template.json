@@ -1,0 +1,25 @@
+{
+  "id": "image-to-cinematic-movie",
+  "type": "video",
+  "name": "Image to Cinematic Movie Trailer",
+  "category": "image_to_video",
+  "subCategory": "Image to Video Motion",
+  "description": "Turn any static Indian portrait into a Hollywood & Bollywood level cinematic camera push-in movie scene.",
+  "badge": "🎬 Movie Magic",
+  "previewPath": "/template-library/video/image-to-cinematic-movie/cover.jpg",
+  "coverPath": "/template-library/video/image-to-cinematic-movie/cover.jpg",
+  "videoPath": "https://assets.mixkit.co/videos/preview/mixkit-girl-walking-on-the-beach-at-sunset-1250-large.mp4",
+  "prompt": "Cinematic slow zoom camera push-in, natural facial expressions, subtle blinking, atmospheric haze and warm anamorphic flare",
+  "creditCost": 120,
+  "featured": true,
+  "sortPriority": 2,
+  "isActive": true,
+  "likesCount": 76200,
+  "tags": [
+    "image to video",
+    "cinematic",
+    "movie",
+    "motion",
+    "animation"
+  ]
+}

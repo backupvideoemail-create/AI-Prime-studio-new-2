@@ -1,0 +1,27 @@
+{
+  "id": "royal-indian-portrait",
+  "type": "photo",
+  "name": "Royal Indian Darbar",
+  "category": "royal",
+  "subCategory": "Indian & Desi",
+  "gender": "male",
+  "description": "Grand royal palace court with antique sandstone arches, royal silk achkan, and majestic Rajput aura.",
+  "badge": "👑 Royal Darbar",
+  "previewPath": "/template-library/photo/royal-indian-portrait/preview.jpg",
+  "beforePath": "/template-library/photo/royal-indian-portrait/before.jpg",
+  "afterPath": "/template-library/photo/royal-indian-portrait/after.jpg",
+  "prompt": "Majestic Rajput royal king portrait in Udaipur palace courtyard, antique carved sandstone, handcrafted silk sherwani, uncut polki jewelry",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 3,
+  "isActive": true,
+  "likesCount": 57800,
+  "tags": [
+    "royal",
+    "indian",
+    "desi",
+    "sherwani",
+    "rajasthani",
+    "palace"
+  ]
+}

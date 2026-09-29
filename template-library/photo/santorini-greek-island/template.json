@@ -1,0 +1,26 @@
+{
+  "id": "santorini-greek-island",
+  "type": "photo",
+  "name": "Santorini Island Cliff",
+  "category": "travel",
+  "subCategory": "Lifestyle & Location",
+  "gender": "female",
+  "description": "Iconic white-washed Santorini cliffside with deep Aegean blue sea, azure domes, and radiant Mediterranean sun.",
+  "badge": "🇬🇷 Santorini",
+  "previewPath": "/template-library/photo/santorini-greek-island/preview.jpg",
+  "beforePath": "/template-library/photo/santorini-greek-island/before.jpg",
+  "afterPath": "/template-library/photo/santorini-greek-island/after.jpg",
+  "prompt": "Pristine Santorini cliffside portrait, white Cycladic architecture, Aegean Sea horizon, elegant linen resort dress",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 6,
+  "isActive": true,
+  "likesCount": 53400,
+  "tags": [
+    "santorini",
+    "travel",
+    "vacation",
+    "location",
+    "greece"
+  ]
+}

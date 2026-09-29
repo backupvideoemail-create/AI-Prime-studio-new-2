@@ -1,0 +1,27 @@
+{
+  "id": "royal-rajputana-princess",
+  "type": "photo",
+  "name": "Royal Rajputana Princess",
+  "category": "royal",
+  "subCategory": "Indian & Desi",
+  "gender": "female",
+  "description": "Palace courtyard portrait with hand-woven royal silk poshak, jadau jewelry, and ethereal royal radiance.",
+  "badge": "👑 Royal Princess",
+  "previewPath": "/template-library/photo/royal-rajputana-princess/preview.jpg",
+  "beforePath": "/template-library/photo/royal-rajputana-princess/before.jpg",
+  "afterPath": "/template-library/photo/royal-rajputana-princess/after.jpg",
+  "prompt": "Grand Rajasthani royal princess portrait in heritage palace jharokha, pure silk embroidered poshak, antique kundan jewelry, soft palace golden light",
+  "creditCost": 50,
+  "featured": true,
+  "sortPriority": 5,
+  "isActive": true,
+  "likesCount": 52400,
+  "tags": [
+    "royal",
+    "princess",
+    "rajputana",
+    "palace",
+    "heritage",
+    "girls"
+  ]
+}

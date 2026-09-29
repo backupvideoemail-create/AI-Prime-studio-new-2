@@ -1,0 +1,26 @@
+{
+  "id": "paris-cafe-aesthetic",
+  "type": "photo",
+  "name": "Parisian Café Chic",
+  "category": "social",
+  "subCategory": "Lifestyle & Location",
+  "gender": "female",
+  "description": "Effortless Parisian sidewalk bistro marble table with warm morning latte and chic trench coat.",
+  "badge": "🥐 Paris Café",
+  "previewPath": "/template-library/photo/paris-cafe-aesthetic/preview.jpg",
+  "beforePath": "/template-library/photo/paris-cafe-aesthetic/before.jpg",
+  "afterPath": "/template-library/photo/paris-cafe-aesthetic/after.jpg",
+  "prompt": "Effortless lifestyle portrait seated at vintage Parisian sidewalk cafe, soft morning dappled sunlight, stylish trench coat",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 8,
+  "isActive": true,
+  "likesCount": 49800,
+  "tags": [
+    "paris",
+    "cafe",
+    "lifestyle",
+    "travel",
+    "europe"
+  ]
+}

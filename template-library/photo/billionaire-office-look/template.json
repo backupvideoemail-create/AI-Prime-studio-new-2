@@ -1,0 +1,27 @@
+{
+  "id": "billionaire-office-look",
+  "type": "photo",
+  "name": "Billionaire Office Look",
+  "category": "professional",
+  "subCategory": "Professional & Career",
+  "gender": "male",
+  "description": "High-rise executive corner office overlooking glass skyscrapers with charcoal pin-striped suit and luxury watch.",
+  "badge": "💼 Forbes Cover",
+  "previewPath": "/template-library/photo/billionaire-office-look/preview.jpg",
+  "beforePath": "/template-library/photo/billionaire-office-look/before.jpg",
+  "afterPath": "/template-library/photo/billionaire-office-look/after.jpg",
+  "prompt": "Billionaire CEO executive portrait, bespoke charcoal tailored pinstripe suit, floor-to-ceiling Manhattan financial view, power stance",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 2,
+  "isActive": true,
+  "likesCount": 29800,
+  "tags": [
+    "billionaire",
+    "office",
+    "ceo",
+    "suit",
+    "professional",
+    "men"
+  ]
+}

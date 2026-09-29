@@ -1,0 +1,26 @@
+{
+  "id": "cyberpunk-future-city",
+  "type": "photo",
+  "name": "Cyber Future 2077",
+  "category": "creative",
+  "subCategory": "Artistic & AI Transformation",
+  "gender": "male",
+  "description": "Futuristic sci-fi mega-city with holographic billboards, neon rain reflections, and high-tech styling.",
+  "badge": "⚡ Cyberpunk",
+  "previewPath": "/template-library/photo/cyberpunk-future-city/preview.jpg",
+  "beforePath": "/template-library/photo/cyberpunk-future-city/before.jpg",
+  "afterPath": "/template-library/photo/cyberpunk-future-city/after.jpg",
+  "prompt": "Futuristic cyberpunk neon metropolis portrait, holographic reflections, sleek high-tech jacket, cinematic blade runner aesthetic",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 11,
+  "isActive": true,
+  "likesCount": 56700,
+  "tags": [
+    "cyberpunk",
+    "futuristic",
+    "sci-fi",
+    "neon",
+    "artistic"
+  ]
+}

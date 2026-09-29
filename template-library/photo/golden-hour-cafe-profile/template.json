@@ -1,0 +1,26 @@
+{
+  "id": "golden-hour-cafe-profile",
+  "type": "photo",
+  "name": "Golden Hour Sunset Profile",
+  "category": "social",
+  "subCategory": "Social Media & Profile",
+  "gender": "female",
+  "description": "Glowing warm golden hour sunset light kissing hair and skin at a sunlit aesthetic cafe.",
+  "badge": "✨ Golden Hour",
+  "previewPath": "/template-library/photo/golden-hour-cafe-profile/preview.jpg",
+  "beforePath": "/template-library/photo/golden-hour-cafe-profile/before.jpg",
+  "afterPath": "/template-library/photo/golden-hour-cafe-profile/after.jpg",
+  "prompt": "Sun-drenched golden hour rooftop cafe lifestyle portrait, warm backlit glow through hair, effortless ivory linen shirt",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 13,
+  "isActive": true,
+  "likesCount": 58900,
+  "tags": [
+    "golden hour",
+    "instagram",
+    "profile",
+    "aesthetic",
+    "sunset"
+  ]
+}

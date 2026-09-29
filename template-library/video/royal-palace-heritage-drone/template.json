@@ -1,0 +1,25 @@
+{
+  "id": "royal-palace-heritage-drone",
+  "type": "video",
+  "name": "Royal Palace Heritage Orbit",
+  "category": "text_to_video",
+  "subCategory": "Text-to-Video Motion",
+  "description": "Breathtaking 360-degree drone orbit around a grand Rajasthani illuminated heritage palace at twilight.",
+  "badge": "👑 Royal Drone",
+  "previewPath": "/template-library/video/royal-palace-heritage-drone/cover.jpg",
+  "coverPath": "/template-library/video/royal-palace-heritage-drone/cover.jpg",
+  "videoPath": "https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-luxurious-hotel-at-sunset-41481-large.mp4",
+  "prompt": "Smooth 360 drone orbit around illuminated Udaipur Lake Palace at twilight, reflected water ripples, royal festive torches",
+  "creditCost": 110,
+  "featured": false,
+  "sortPriority": 4,
+  "isActive": true,
+  "likesCount": 52100,
+  "tags": [
+    "palace",
+    "drone",
+    "heritage",
+    "text to video",
+    "rajasthan"
+  ]
+}

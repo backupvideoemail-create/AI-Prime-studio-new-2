@@ -1,0 +1,26 @@
+{
+  "id": "temple-kanjeevaram-heritage",
+  "type": "photo",
+  "name": "Temple Kanjeevaram Heritage",
+  "category": "royal",
+  "subCategory": "Indian & Desi",
+  "gender": "female",
+  "description": "Pure woven gold zari Kanjeevaram silk saree with ancient temple pillars and warm ceremonial diya bokeh.",
+  "badge": "🪔 Temple Heritage",
+  "previewPath": "/template-library/photo/temple-kanjeevaram-heritage/preview.jpg",
+  "beforePath": "/template-library/photo/temple-kanjeevaram-heritage/before.jpg",
+  "afterPath": "/template-library/photo/temple-kanjeevaram-heritage/after.jpg",
+  "prompt": "Grand temple corridor portrait, pure mulberry silk Kanjeevaram saree with rich gold zari border, antique temple jewelry",
+  "creditCost": 50,
+  "featured": false,
+  "sortPriority": 16,
+  "isActive": true,
+  "likesCount": 48300,
+  "tags": [
+    "temple",
+    "kanjeevaram",
+    "saree",
+    "desi",
+    "heritage"
+  ]
+}
