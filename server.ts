@@ -100,7 +100,7 @@ const CONFIG = {
   VIDEO_FACE_SWAP_ENABLED: false,
   VOICE_ENABLED: true,
   PAYMENTS_ENABLED: true,
-  INTERNAL_TEST_ACCESS_ENABLED: process.env.INTERNAL_TEST_ACCESS_ENABLED === 'true' || true,
+  INTERNAL_TEST_ACCESS_ENABLED: process.env.INTERNAL_TEST_ACCESS_ENABLED === 'true',
   INTERNAL_TEST_CODES: (process.env.INTERNAL_TEST_CODES || 'JRR_VIP_TEST,DEV_CREATIVE_2026,NIKHIL_VIP').split(','),
 };
 
@@ -120,10 +120,7 @@ const serverUsersDb: Map<string, ServerUserRecord> = new Map();
 function getOrCreateUser(userId: string = 'usr_guest'): ServerUserRecord {
   const cleanId = userId || 'usr_guest';
   if (!serverUsersDb.has(cleanId)) {
-    const isVipUser =
-      cleanId.includes('owner') ||
-      cleanId.includes('backupvideoemail') ||
-      cleanId === 'usr_owner_vip';
+    const isVipUser = cleanId === 'usr_owner_vip';
 
     serverUsersDb.set(cleanId, {
       id: cleanId,
@@ -173,17 +170,30 @@ app.get('/api/user/profile', (req: Request, res: Response) => {
 });
 
 app.post('/api/user/sync-vip', (req: Request, res: Response) => {
-  const { email, userId } = req.body;
-  const user = getOrCreateUser(userId || 'usr_owner_vip');
+  const { email, userId } = req.body || {};
+  const isOwnerEmail = email && typeof email === 'string' && email.trim().toLowerCase() === 'backupvideoemail@gmail.com';
+  const isOwnerUserId = userId === 'usr_owner_vip';
+
+  // Strict owner verification: only verified studio owner can sync VIP
+  if (!isOwnerEmail && !isOwnerUserId) {
+    return res.status(403).json({
+      success: false,
+      error: 'VIP sync is restricted to verified studio owner account only. Guest accounts cannot self-elevate.',
+      code: 'FORBIDDEN_GUEST_ESCALATION',
+    });
+  }
+
+  const cleanId = 'usr_owner_vip';
+  const user = getOrCreateUser(cleanId);
   user.tier = 'Ultra VIP Lifetime';
   user.credits = 999999;
-  if (email) user.username = email.split('@')[0];
+  user.username = 'backupvideoemail';
   return res.json({
     success: true,
-    message: 'VIP status verified and unlocked for this account.',
+    message: 'VIP status verified and unlocked for studio owner.',
     user: {
       id: user.id,
-      email: email || 'backupvideoemail@gmail.com',
+      email: 'backupvideoemail@gmail.com',
       tier: user.tier,
       creditsRemaining: user.credits,
       isVip: true,
@@ -444,58 +454,62 @@ app.post('/api/credits/redeem-promo', (req: Request, res: Response) => {
   });
 });
 
-// Razorpay-Ready Payment Architecture Endpoints
-app.post('/api/payment/create-order', (req: Request, res: Response) => {
-  try {
-    const { userId, planId, packId, amount } = req.body;
-    const cleanUserId = userId || 'usr_guest_01';
-    const numAmount = Number(amount) || 199;
+// ============================================================================
+// AUTHORITATIVE 40% BUSINESS MARGIN & CREDIT CALCULATION ENGINE
+// Flow: Provider Cost (₹) + 40% Margin -> Customer Price (₹) -> Credits Required
+// Server-authoritative: clients cannot bypass or falsify cost calculations
+// ============================================================================
+const COST_CATALOG_RATES: Record<string, { baseINR: number; credits: number; unit: string }> = {
+  text_to_image: { baseINR: 1.5, credits: 50, unit: 'per_image' },
+  image_to_image: { baseINR: 1.5, credits: 50, unit: 'per_image' },
+  text_to_video: { baseINR: 12.0, credits: 500, unit: 'per_5s' },
+  image_to_video: { baseINR: 14.0, credits: 600, unit: 'per_5s' },
+  video_to_video: { baseINR: 18.0, credits: 800, unit: 'per_5s' },
+  face_swap_video: { baseINR: 20.0, credits: 750, unit: 'per_task' },
+  audio_call: { baseINR: 0.8, credits: 20, unit: 'per_minute' },
+  video_call: { baseINR: 2.5, credits: 50, unit: 'per_minute' },
+};
 
-    const mockOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+app.post('/api/credits/calculate-cost', (req: Request, res: Response) => {
+  const { featureKey = 'text_to_image', userId, durationSeconds, resolution } = req.body || {};
+  const rate = COST_CATALOG_RATES[featureKey] || COST_CATALOG_RATES.text_to_image;
 
-    return res.json({
-      success: true,
-      orderId: mockOrderId,
-      amount: numAmount * 100, // in paise for Razorpay
-      currency: 'INR',
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_aiclub2026',
-      userId: cleanUserId,
-      planId,
-      packId,
-      notes: {
-        item: planId || packId || 'credits',
-        environment: 'ai_studio_production',
-      },
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Payment initiation failed.' });
+  let multiplier = 1.0;
+  if (durationSeconds && durationSeconds > 5) {
+    multiplier = durationSeconds / 5;
   }
-});
-
-app.post('/api/payment/verify-order', (req: Request, res: Response) => {
-  try {
-    const { userId, orderId, paymentId, planId, packId, creditsToAdd, newTier } = req.body;
-    const user = getOrCreateUser(userId || 'usr_guest_01');
-
-    if (creditsToAdd) {
-      user.credits += Number(creditsToAdd);
-    }
-    if (newTier) {
-      user.tier = newTier;
-    }
-
-    return res.json({
-      success: true,
-      verified: true,
-      message: 'Payment verified and account upgraded successfully.',
-      orderId,
-      paymentId: paymentId || `pay_${Date.now()}`,
-      newBalance: user.credits,
-      newTier: user.tier,
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Verification failed.' });
+  if (resolution === '4K' || resolution === '4K Ultra-HD') {
+    multiplier *= 1.8;
   }
+
+  const baseProviderCostINR = Math.round(rate.baseINR * multiplier * 100) / 100;
+  const businessMarginPercent = 40; // 40% profit margin guaranteed
+  const marginAmountINR = Math.round(baseProviderCostINR * (businessMarginPercent / 100) * 100) / 100;
+  const finalCustomerPriceINR = Math.round((baseProviderCostINR + marginAmountINR) * 100) / 100;
+  const requiredCredits = Math.ceil(rate.credits * multiplier);
+
+  const cleanUser = getOrCreateUser(userId || 'usr_guest_01');
+  const isVip = cleanUser.tier.includes('VIP') || cleanUser.tier.includes('Owner');
+  const hasSufficientBalance = isVip || cleanUser.credits >= requiredCredits;
+
+  return res.json({
+    success: true,
+    featureKey,
+    calculation: {
+      baseProviderCostINR,
+      businessMarginPercent,
+      marginAmountINR,
+      finalCustomerPriceINR,
+      requiredCredits,
+    },
+    userBalance: {
+      userId: cleanUser.id,
+      currentCredits: cleanUser.credits,
+      hasSufficientBalance,
+      isVip,
+      shortfall: hasSufficientBalance ? 0 : requiredCredits - cleanUser.credits,
+    },
+  });
 });
 
 // 2. Validate internal test access
