@@ -1,0 +1,64 @@
+name: Template Auto-Drop
+
+on:
+  push:
+    paths:
+      - 'template-drop/photo/**'
+      - 'template-drop/video/**'
+  workflow_dispatch:
+    inputs:
+      input_path:
+        description: 'Optional media path'
+        required: false
+        default: 'template-drop'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: template-auto-drop
+  cancel-in-progress: false
+
+jobs:
+  build-templates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Template Auto-Drop
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: npx tsx scripts/template-auto-drop.ts "${{ inputs.input_path || 'template-drop' }}"
+
+      - name: Commit generated templates
+        run: |
+          git config user.name "Template Auto-Drop Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No new templates were generated."
+            exit 0
+          fi
+
+          git add template-library
+          git commit -m "feat(template): auto-generate template"
+          git push
