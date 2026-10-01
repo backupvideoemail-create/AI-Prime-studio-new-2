@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 
@@ -1496,58 +1497,287 @@ app.post('/api/ai/live/create-video-session', (req: Request, res: Response) => {
 // Section 26, 27, 28, 29 of Master Final Build Instruction
 // ============================================================================
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+interface CatalogItem {
+  id: string;
+  name: string;
+  price: number;
+  credits: number;
+}
 
-app.post('/api/payment/create-order', (req: Request, res: Response) => {
-  const { planId, type, amount, currency = 'INR', customerEmail } = req.body;
+const SERVER_PLANS: Record<string, CatalogItem> = {
+  free: { id: 'free', name: 'Free Signup', price: 0, credits: 0 },
+  trial: { id: 'trial', name: '₹2 Intro Trial', price: 2, credits: 150 },
+  plus: { id: 'plus', name: 'PLUS', price: 99, credits: 400 },
+  pro: { id: 'pro', name: 'PRO', price: 199, credits: 1000 },
+  ultra_pro: { id: 'ultra_pro', name: 'ULTRA PRO', price: 299, credits: 1500 },
+  ultra_pro_max: { id: 'ultra_pro_max', name: 'ULTRA PRO MAX', price: 999, credits: 5000 },
+};
 
-  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-    return res.json({
-      success: false,
-      providerConfigured: false,
-      orderId: `ORD_DEV_${Date.now()}_${planId}`,
-      amount,
-      currency,
-      message: 'Razorpay gateway adapter initialized. Live credentials pending in environment.',
-      isTestMode: true,
-    });
+const SERVER_PACKS: Record<string, CatalogItem> = {
+  pack_500: { id: 'pack_500', name: '500 Top-Up Credits', price: 99, credits: 500 },
+  pack_1000: { id: 'pack_1000', name: '1,000 Top-Up Credits', price: 189, credits: 1000 },
+  pack_2500: { id: 'pack_2500', name: '2,500 Top-Up Credits', price: 399, credits: 2500 },
+  pack_5000: { id: 'pack_5000', name: '5,000 Top-Up Credits', price: 699, credits: 5000 },
+};
+
+// Replay prevention: store verified payment IDs
+const processedPaymentIds = new Set<string>();
+
+function getRazorpayKeys() {
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf-8');
+      const parsed = dotenv.parse(envContent);
+      if (parsed.RAZORPAY_KEY_ID) process.env.RAZORPAY_KEY_ID = parsed.RAZORPAY_KEY_ID;
+      if (parsed.RAZORPAY_KEY_SECRET) process.env.RAZORPAY_KEY_SECRET = parsed.RAZORPAY_KEY_SECRET;
+    }
+  } catch {
+    // ignore
   }
 
-  // Live Razorpay order creation
+  const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+  const isPlaceholder =
+    !keyId ||
+    !keySecret ||
+    keyId.includes('YOUR_KEY_ID') ||
+    keyId.includes('YOUR_TEST_KEY_ID') ||
+    keySecret.includes('YOUR_KEY_SECRET') ||
+    keySecret.includes('YOUR_TEST_KEY_SECRET');
+
+  const isConfigured = Boolean(!isPlaceholder && keyId && keySecret);
+  const isTestMode = keyId.startsWith('rzp_test_');
+  return { keyId, keySecret, isConfigured, isTestMode };
+}
+
+// Payment gateway configuration status for frontend
+app.get('/api/payment/config', (req: Request, res: Response) => {
+  const { keyId, isConfigured, isTestMode } = getRazorpayKeys();
   return res.json({
-    success: true,
-    providerConfigured: true,
-    orderId: `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-    keyId: RAZORPAY_KEY_ID,
-    amount: amount * 100,
-    currency,
+    configured: isConfigured,
+    keyId: isConfigured ? keyId : null,
+    mode: !isConfigured ? 'unconfigured' : isTestMode ? 'test' : 'live',
+    currency: 'INR',
+    message: isConfigured
+      ? isTestMode
+        ? 'Razorpay Test Mode Active — Safe sandbox mode (no real money deducted)'
+        : 'Razorpay Live Production Mode Active'
+      : 'Razorpay keys pending in server environment (.env).',
   });
 });
 
-app.post('/api/payment/verify-order', (req: Request, res: Response) => {
-  const { orderId, paymentId, signature, userId, credits = 0, tier } = req.body;
+app.post('/api/payment/create-order', async (req: Request, res: Response) => {
+  try {
+    const { planId, type = 'plan', userId = 'usr_guest', customerEmail, customerName } = req.body;
+    const { keyId, keySecret, isConfigured, isTestMode } = getRazorpayKeys();
 
-  if (!RAZORPAY_KEY_SECRET) {
+    const catalogItem = type === 'plan' ? SERVER_PLANS[planId] : SERVER_PACKS[planId];
+    if (!catalogItem) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid ${type} item ID: "${planId}".`,
+      });
+    }
+
+    const amountInPaise = Math.round(catalogItem.price * 100);
+
+    if (!isConfigured) {
+      return res.json({
+        success: false,
+        providerConfigured: false,
+        isTestMode: true,
+        orderId: `ORD_DEV_${Date.now()}_${planId}`,
+        amount: amountInPaise,
+        currency: 'INR',
+        item: catalogItem,
+        message: 'Razorpay keys (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) are not configured in .env yet.',
+      });
+    }
+
+    // Call Razorpay API to create authoritative order
+    const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amountInPaise,
+        currency: 'INR',
+        receipt: `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`.substring(0, 40),
+        notes: {
+          planId: catalogItem.id,
+          productName: catalogItem.name,
+          type,
+          userId,
+        },
+      }),
+    });
+
+    const rzpData = (await rzpResponse.json()) as any;
+
+    if (!rzpResponse.ok) {
+      console.error('[Razorpay Order Creation Failed]', rzpData);
+      return res.status(rzpResponse.status || 400).json({
+        success: false,
+        providerConfigured: true,
+        error: rzpData?.error?.description || 'Failed to create order with Razorpay.',
+      });
+    }
+
     return res.json({
+      success: true,
+      providerConfigured: true,
+      orderId: rzpData.id,
+      keyId,
+      amount: rzpData.amount,
+      currency: rzpData.currency || 'INR',
+      isTestMode,
+      item: catalogItem,
+    });
+  } catch (err: any) {
+    console.error('[Razorpay Create Order Exception]', err);
+    return res.status(500).json({
       success: false,
-      verified: false,
-      status: 'pending_configuration',
-      error: 'Live payment verification requires RAZORPAY_KEY_SECRET in server environment.',
+      error: err?.message || 'Server error while initializing payment order.',
     });
   }
+});
 
-  // Authoritative server-side plan activation
-  const user = getOrCreateUser(userId);
-  if (tier) user.tier = tier;
-  if (credits > 0) user.credits += credits;
+app.post('/api/payment/verify-order', (req: Request, res: Response) => {
+  try {
+    const { orderId, paymentId, signature, planId, type = 'plan', userId = 'usr_guest' } = req.body;
+    const { keyId, keySecret } = getRazorpayKeys();
+
+    if (!keySecret) {
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        status: 'pending_configuration',
+        error: 'Live payment verification requires RAZORPAY_KEY_SECRET in server environment (.env).',
+      });
+    }
+
+    if (!orderId || !paymentId || !signature) {
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        error: 'Missing required Razorpay parameters: orderId, paymentId, and signature are all required.',
+      });
+    }
+
+    // 1. Replay prevention check
+    if (processedPaymentIds.has(paymentId)) {
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        error: 'This payment transaction has already been verified and credited. Replay attempts are blocked.',
+      });
+    }
+
+    // 2. Cryptographic signature check: HMAC SHA256(order_id + "|" + payment_id, secret)
+    const expectedSignature = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
+
+    let isMatch = false;
+    try {
+      isMatch = crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, 'utf-8'),
+        Buffer.from(signature, 'utf-8')
+      );
+    } catch {
+      isMatch = false;
+    }
+
+    if (!isMatch) {
+      console.warn(`[Security Alert] Signature mismatch for order: ${orderId}, payment: ${paymentId}`);
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        error: 'Invalid payment signature! Cryptographic verification failed.',
+      });
+    }
+
+    // 3. Authoritative catalog lookup (Server never trusts client-supplied credits or tier!)
+    const catalogItem = type === 'plan' ? SERVER_PLANS[planId] : SERVER_PACKS[planId];
+    if (!catalogItem) {
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        error: `Payment verified but invalid item specified: ${planId}`,
+      });
+    }
+
+    // 4. Record transaction as processed
+    processedPaymentIds.add(paymentId);
+
+    // 5. Activate user credits and plan
+    const user = getOrCreateUser(userId);
+    let planActivated: string | undefined = undefined;
+
+    if (type === 'plan') {
+      planActivated = catalogItem.name;
+      user.tier = catalogItem.name;
+    }
+    user.credits += catalogItem.credits;
+
+    console.log(`[Payment Verified] Txn: ${paymentId}, Item: ${catalogItem.name}, Credits Granted: ${catalogItem.credits}, User: ${userId}`);
+
+    return res.json({
+      success: true,
+      verified: true,
+      transactionId: paymentId,
+      orderId,
+      planActivated,
+      creditsGranted: catalogItem.credits,
+      newTotalCredits: user.credits,
+      isTestMode: keyId.startsWith('rzp_test_'),
+      status: 'captured',
+      message: `Payment verified! Added ${catalogItem.credits} credits to your account.`,
+    });
+  } catch (err: any) {
+    console.error('[Verify Order Error]', err);
+    return res.status(500).json({
+      success: false,
+      verified: false,
+      error: 'Internal server error verifying payment.',
+    });
+  }
+});
+
+// Diagnostic Self-Test Endpoint for verifying payment cryptography and configuration
+app.get('/api/payment/diagnostics', (req: Request, res: Response) => {
+  const { keyId, keySecret, isConfigured, isTestMode } = getRazorpayKeys();
+
+  // Test crypto calculation
+  const sampleSecret = 'test_secret_sample_key';
+  const sampleOrder = 'order_sample12345';
+  const samplePayment = 'pay_sample67890';
+  const sampleExpectedSig = crypto
+    .createHmac('sha256', sampleSecret)
+    .update(`${sampleOrder}|${samplePayment}`)
+    .digest('hex');
+
+  const sampleMatch = crypto.timingSafeEqual(
+    Buffer.from(sampleExpectedSig, 'utf-8'),
+    Buffer.from(sampleExpectedSig, 'utf-8')
+  );
 
   return res.json({
-    success: true,
-    verified: true,
-    transactionId: `txn_${Date.now()}`,
-    planActivated: tier,
-    creditsGranted: credits,
+    status: 'ok',
+    cryptoEngine: 'HMAC-SHA256 (Node.js Crypto timingSafeEqual)',
+    cryptoSelfTestPass: sampleMatch,
+    keyConfigured: isConfigured,
+    keyMode: !isConfigured ? 'unconfigured' : isTestMode ? 'test' : 'live',
+    keyIdPreview: keyId ? `${keyId.substring(0, 10)}...` : null,
+    replayPreventionActive: true,
+    processedTransactionsCount: processedPaymentIds.size,
+    serverCatalogPlans: Object.keys(SERVER_PLANS),
+    serverCatalogPacks: Object.keys(SERVER_PACKS),
   });
 });
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenRoute } from '../types';
 import { useLanguage } from '../i18n';
 import {
@@ -15,6 +15,13 @@ import {
 } from '../config/plans';
 import { storageService } from '../services/storageService';
 import { subscriptionService } from '../services/subscriptionService';
+import {
+  getPaymentConfig,
+  initializeCheckout,
+  verifyPayment,
+  loadRazorpayCheckoutScript,
+  PaymentGatewayConfig,
+} from '../services/paymentService';
 import {
   Sparkles,
   Check,
@@ -31,6 +38,7 @@ import {
   Smartphone,
   CreditCard,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface PricingScreenProps {
@@ -55,6 +63,14 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
   const [testCodeStatus, setTestCodeStatus] = useState<string | null>(null);
 
   const userProfile = storageService.getUserProfile();
+
+  const [paymentConfig, setPaymentConfig] = useState<PaymentGatewayConfig | null>(null);
+
+  useEffect(() => {
+    getPaymentConfig().then((cfg) => {
+      setPaymentConfig(cfg);
+    });
+  }, []);
 
   const handleOpenCheckout = (item: PlanConfig | CreditPack, type: 'plan' | 'pack') => {
     setGatewayError(null);
@@ -107,73 +123,121 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
     setGatewayError(null);
 
     const { type, item } = checkoutModal;
-    const amount = 'priceMonthly' in item ? item.priceMonthly : item.price;
-    const creditsToAdd = 'creditsPerMonth' in item ? item.creditsPerMonth : item.credits;
 
     try {
-      // 1. Call Backend to create order
-      const createRes = await fetch('/api/payment/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: item.id,
-          amount,
-          currency: 'INR',
-          type,
-        }),
+      // 1. Call Backend to create authoritative order
+      const orderData = await initializeCheckout({
+        planId: item.id,
+        type,
+        userId: userProfile.id,
+        customerEmail: userProfile.email || undefined,
+        customerName: userProfile.name || undefined,
       });
 
-      const orderData = await createRes.json();
-
-      // If Razorpay live merchant credentials are not yet configured on server
-      if (!orderData.providerConfigured) {
+      // If Razorpay credentials are not yet configured in .env on server
+      if (!orderData.providerConfigured || !orderData.success) {
         setGatewayError(
-          'Razorpay payment gateway adapter is initialized in API-ready mode. Live merchant API keys (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) are pending configuration on the server. No card was charged.'
+          orderData.message ||
+            'Razorpay credentials pending on server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env to activate online payments.'
         );
         setShowTestCodeInput(true);
+        setIsProcessing(false);
         return;
       }
 
-      // 2. Real live Razorpay checkout verification
-      const verifyRes = await fetch('/api/payment/verify-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: orderData.orderId,
-          paymentId: `pay_${Date.now()}`,
-          signature: `sig_${Date.now()}`,
-          userId: userProfile.id,
-          credits: creditsToAdd,
-          tier: type === 'plan' ? item.name : undefined,
-        }),
-      });
-
-      const verifyData = await verifyRes.json();
-
-      if (verifyData.verified) {
-        if (type === 'plan') {
-          subscriptionService.activatePlan(userProfile.id, item.id);
-        } else {
-          storageService.addCredits(
-            creditsToAdd,
-            `Purchased ${item.name} (Top-up)`,
-            'topup'
-          );
-        }
-
-        setSuccessNotice(
-          `🎉 Payment successful! Added ${creditsToAdd} credits to your account balance.`
-        );
-        setCheckoutModal(null);
-      } else {
-        setGatewayError(verifyData.error || 'Payment verification could not be completed.');
+      // 2. Ensure Razorpay Checkout SDK is ready
+      const sdkReady = await loadRazorpayCheckoutScript();
+      if (!sdkReady || !(window as any).Razorpay) {
+        setGatewayError('Could not load Razorpay payment window. Please check your internet connection and retry.');
+        setIsProcessing(false);
+        return;
       }
-    } catch {
+
+      // 3. Open official Razorpay Checkout popup
+      const rzpOptions = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'Radha Rani AI Studio',
+        description: `${item.name} (${type === 'plan' ? 'Subscription' : 'Top-Up Pack'})`,
+        order_id: orderData.orderId,
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          setIsProcessing(true);
+          setGatewayError(null);
+
+          try {
+            // 4. Authoritative server verification (HMAC-SHA256)
+            const verifyResult = await verifyPayment({
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              planId: item.id,
+              type,
+              userId: userProfile.id,
+            });
+
+            if (verifyResult.verified) {
+              if (type === 'plan') {
+                subscriptionService.activatePlan(userProfile.id, item.id);
+                if (verifyResult.planActivated) {
+                  storageService.updateMembershipTier(verifyResult.planActivated as any);
+                }
+              }
+              if (verifyResult.creditsGranted) {
+                storageService.addCredits(
+                  verifyResult.creditsGranted,
+                  `Verified Razorpay: ${item.name} (Txn: ${response.razorpay_payment_id})`,
+                  type === 'plan' ? 'subscription' : 'topup'
+                );
+              }
+
+              const modeLabel = verifyResult.isTestMode ? 'Test Mode' : 'Live';
+              setSuccessNotice(
+                `🎉 Payment Verified (${modeLabel})! Added ${verifyResult.creditsGranted} credits to your account.`
+              );
+              setCheckoutModal(null);
+            } else {
+              setGatewayError(verifyResult.error || 'Payment signature verification failed on backend.');
+            }
+          } catch (err: any) {
+            setGatewayError('Network error while verifying payment on server.');
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        prefill: {
+          name: userProfile.name || 'Creative Member',
+          email: userProfile.email || 'customer@aiprime.studio',
+        },
+        notes: {
+          planId: item.id,
+          userId: userProfile.id,
+        },
+        theme: {
+          color: '#d4af37',
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+          },
+        },
+      };
+
+      const rzpInstance = new (window as any).Razorpay(rzpOptions);
+      rzpInstance.on('payment.failed', function (resp: any) {
+        setGatewayError(resp.error?.description || 'Payment was declined or cancelled.');
+        setIsProcessing(false);
+      });
+      rzpInstance.open();
+    } catch (err: any) {
       setGatewayError(
-        'Payment gateway server is pending configuration. Real cards are not processed in development mode.'
+        'Could not initiate payment session. Check server logs or configure Razorpay credentials.'
       );
       setShowTestCodeInput(true);
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -436,7 +500,7 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
             className="w-full max-w-sm bg-[#0d1017] border border-[#d4af37]/40 rounded-3xl p-6 shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-center space-y-1">
+            <div className="text-center space-y-2">
               <span className="text-[10px] uppercase font-bold tracking-widest text-[#d4af37]">
                 Secure Studio Checkout
               </span>
@@ -446,6 +510,25 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
               <p className="text-xs text-gray-400">
                 Amount payable: <span className="text-[#fceda7] font-bold text-sm">₹{'priceMonthly' in checkoutModal.item ? checkoutModal.item.priceMonthly : checkoutModal.item.price}</span>
               </p>
+
+              {paymentConfig?.mode === 'test' && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-[10px] text-emerald-300 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Razorpay Test Mode Active (Safe Testing)</span>
+                </div>
+              )}
+              {paymentConfig?.mode === 'live' && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#d4af37]/20 border border-[#d4af37]/40 text-[10px] text-[#fceda7] font-semibold">
+                  <Lock className="w-3 h-3 text-[#d4af37]" />
+                  <span>Razorpay Live 256-Bit SSL Active</span>
+                </div>
+              )}
+              {paymentConfig?.mode === 'unconfigured' && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-[10px] text-amber-300 font-semibold">
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <span>Razorpay Keys Pending in .env</span>
+                </div>
+              )}
             </div>
 
             <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2 text-xs text-gray-300">
@@ -467,93 +550,30 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
               </div>
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="space-y-2 text-left">
-              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                Select Payment Mode:
-              </span>
-              <div className="grid grid-cols-3 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('autopay')}
-                  className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 text-center transition-all ${
-                    paymentMethod === 'autopay'
-                      ? 'bg-[#d4af37]/15 border-[#d4af37] text-[#fceda7] shadow-sm'
-                      : 'bg-white/[0.03] border-white/[0.08] text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-[#d4af37]" />
-                  <span className="text-[10px] font-bold">AutoPay</span>
-                  <span className="text-[8px] opacity-75">Recurring</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('upi')}
-                  className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 text-center transition-all ${
-                    paymentMethod === 'upi'
-                      ? 'bg-[#d4af37]/15 border-[#d4af37] text-[#fceda7] shadow-sm'
-                      : 'bg-white/[0.03] border-white/[0.08] text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-[10px] font-bold">UPI / QR</span>
-                  <span className="text-[8px] opacity-75">PhonePe/GPay</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('card')}
-                  className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 text-center transition-all ${
-                    paymentMethod === 'card'
-                      ? 'bg-[#d4af37]/15 border-[#d4af37] text-[#fceda7] shadow-sm'
-                      : 'bg-white/[0.03] border-white/[0.08] text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="text-[10px] font-bold">Card / Net</span>
-                  <span className="text-[8px] opacity-75">Debit/Credit</span>
-                </button>
+            {/* Payment Methods Supported */}
+            <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between text-xs text-gray-300">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-[11px] text-gray-300">UPI (PhonePe/GPay), Cards & NetBanking</span>
               </div>
+              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                100% Secure
+              </span>
             </div>
 
-            {/* Gateway pending configuration notice (Section 28) */}
+            {/* Gateway pending configuration notice (Only shows when keys missing) */}
             {gatewayError && (
-              <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-500/30 text-amber-200 text-xs text-left space-y-1 leading-relaxed">
-                <p className="font-semibold text-[#fceda7]">⚠️ Live Payment Gateway Notice:</p>
-                <p>{gatewayError}</p>
-              </div>
-            )}
-
-            {/* Internal Developer / Owner Test Mode (Section 29) */}
-            {showTestCodeInput && (
-              <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-[#d4af37]/30 text-left space-y-2">
-                <span className="text-[10px] font-bold text-[#fceda7] uppercase tracking-wider block">
-                  🛠️ Developer / Owner Test Passkey:
-                </span>
-                <p className="text-[10px] text-gray-300">
-                  Enter authorized test passkey to test plan entitlement & credits on this server:
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    placeholder="Enter passkey..."
-                    value={testPasskey}
-                    onChange={(e) => setTestPasskey(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-[#d4af37]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleTestPasskeyActivate}
-                    disabled={isProcessing || !testPasskey.trim()}
-                    className="px-3.5 py-2 rounded-xl bg-gold-gradient text-[#07080a] font-bold text-xs shadow-md active:scale-95 disabled:opacity-50"
-                  >
-                    Activate
-                  </button>
+              <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/30 text-amber-200 text-xs text-left space-y-2 leading-relaxed">
+                <div className="flex items-center gap-1.5 font-semibold text-[#fceda7]">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Razorpay Setup Notice:</span>
                 </div>
-                {testCodeStatus && (
-                  <p className="text-[10px] text-gray-300 font-medium">{testCodeStatus}</p>
-                )}
+                <p className="text-[11px] text-gray-300">{gatewayError}</p>
+                <div className="p-2.5 rounded-xl bg-black/60 border border-white/10 font-mono text-[10px] text-gray-400 select-all space-y-1">
+                  <p className="font-sans text-[9px] text-amber-300 font-semibold">Place these keys in your .env file:</p>
+                  <p className="text-emerald-400">RAZORPAY_KEY_ID="rzp_test_YOUR_KEY_ID"</p>
+                  <p className="text-emerald-400">RAZORPAY_KEY_SECRET="YOUR_KEY_SECRET"</p>
+                </div>
               </div>
             )}
 
@@ -561,19 +581,15 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
               <button
                 onClick={handleCompletePayment}
                 disabled={isProcessing}
-                className="w-full py-3 rounded-xl bg-gold-gradient text-[#07080a] font-bold text-xs shadow-lg shadow-[#d4af37]/25 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-gold-gradient text-[#07080a] font-bold text-xs shadow-lg shadow-[#d4af37]/25 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
               >
                 {isProcessing ? (
-                  <span>Processing Payment...</span>
+                  <span>Connecting to Razorpay...</span>
                 ) : (
                   <>
                     <Zap className="w-4 h-4 text-[#07080a]" />
                     <span>
-                      {paymentMethod === 'autopay'
-                        ? 'Set Up AutoPay & Start'
-                        : paymentMethod === 'upi'
-                        ? 'Pay via UPI / QR'
-                        : 'Pay with Card'} (₹{'priceMonthly' in checkoutModal.item ? checkoutModal.item.priceMonthly : checkoutModal.item.price})
+                      Proceed to Pay ₹{'priceMonthly' in checkoutModal.item ? checkoutModal.item.priceMonthly : checkoutModal.item.price}
                     </span>
                   </>
                 )}
@@ -586,6 +602,45 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
               >
                 Cancel
               </button>
+            </div>
+
+            {/* Collapsible Owner Test Access (Hidden from regular flow) */}
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => setShowTestCodeInput(!showTestCodeInput)}
+                className="text-[10px] text-gray-500 hover:text-[#d4af37] transition-colors underline"
+              >
+                {showTestCodeInput ? 'Hide Owner Test' : '🛠️ Owner / Test Passkey'}
+              </button>
+
+              {showTestCodeInput && (
+                <div className="mt-2 p-3 rounded-2xl bg-black/70 border border-white/10 text-left space-y-2 animate-fadeIn">
+                  <span className="text-[10px] font-bold text-[#fceda7] uppercase tracking-wider block">
+                    Developer / Owner Test Passkey:
+                  </span>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      placeholder="e.g. DEV_OWNER_VIP_2026"
+                      value={testPasskey}
+                      onChange={(e) => setTestPasskey(e.target.value)}
+                      className="flex-1 px-3 py-1.5 rounded-xl bg-black border border-white/20 text-white text-xs focus:outline-none focus:border-[#d4af37]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleTestPasskeyActivate}
+                      disabled={isProcessing || !testPasskey.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-gold-gradient text-[#07080a] font-bold text-xs shadow-md disabled:opacity-50"
+                    >
+                      Activate
+                    </button>
+                  </div>
+                  {testCodeStatus && (
+                    <p className="text-[10px] text-gray-300 font-medium">{testCodeStatus}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

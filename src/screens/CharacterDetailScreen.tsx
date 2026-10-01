@@ -1393,54 +1393,99 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
         </div>
       )}
 
-      {/* 8. WHATSAPP VIDEO CALL FULL SCREEN OVERLAY */}
+      {/* 8. REALISTIC AI AVATAR VIDEO CALL OVERLAY (Zero-Video-Generation Cost) */}
       {isVideoCalling && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between p-4 sm:p-6 animate-fadeIn text-white">
-          {/* Main Video Background (Character) */}
-          <div className="absolute inset-0 overflow-hidden">
-            <img
-              src={character.avatar}
-              alt={character.name}
-              className="w-full h-full object-cover filter brightness-95"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80" />
+        <div className="fixed inset-0 z-50 bg-[#07080a] flex flex-col justify-between p-4 sm:p-6 animate-fadeIn text-white select-none overflow-hidden">
+          {/* Main Handheld Video Camera Feed (Character) */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {/* Handheld subtle breathing & camera sway motion */}
+            <div className="w-full h-full transform scale-105 transition-transform duration-700 ease-out animate-pulse" style={{ animationDuration: '4s' }}>
+              <img
+                src={character.avatar}
+                alt={character.name}
+                className="w-full h-full object-cover filter brightness-[0.98] contrast-[1.05]"
+              />
+            </div>
+            {/* Cinematic Camera Lens Vignette & Handheld Lighting Gradients */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/75" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-black/20 to-black/70 pointer-events-none" />
+
+            {/* Speaking Audio Glow Effect */}
+            {isCallSpeaking && (
+              <div className="absolute inset-0 border-4 border-[#00a884]/40 animate-pulse pointer-events-none rounded-none" />
+            )}
           </div>
 
-          {/* Top Bar with Timer */}
-          <div className="relative z-10 flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-lg font-cinzel">{character.name}</h3>
-              <p className="text-xs text-[#00a884] font-medium">
-                {callStatus === 'ringing' ? 'Ringing...' : formatTimer(callDuration)}
-              </p>
+          {/* Top Bar with Real Video Call HUD */}
+          <div className="relative z-10 flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <h3 className="font-bold text-lg sm:text-xl font-cinzel drop-shadow-md">{character.name}</h3>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[9px] font-bold text-emerald-300 uppercase tracking-wider">
+                  Live
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-300 drop-shadow">
+                <span className="text-[#00a884] font-semibold">
+                  {callStatus === 'ringing' ? 'Connecting...' : formatTimer(callDuration)}
+                </span>
+                <span>•</span>
+                <span className="text-[10px] text-gray-400">1080p HD • 60fps</span>
+                <span>•</span>
+                <span className="text-[10px] text-emerald-400">End-to-End Encrypted</span>
+              </div>
             </div>
 
-            {/* Self PIP View */}
-            <div className="w-24 h-32 rounded-2xl overflow-hidden border-2 border-white/40 shadow-2xl bg-gray-900">
+            {/* Self PIP View (User Front Camera Simulation) */}
+            <div className="w-24 sm:w-28 h-32 sm:h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl bg-black/80 backdrop-blur-md relative group">
               <img
                 src={userProfile.avatar}
                 alt="You"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transform -scale-x-100"
               />
+              <div className="absolute bottom-1 right-1.5 px-1 rounded bg-black/60 text-[8px] text-gray-300">
+                You
+              </div>
             </div>
           </div>
 
-          {/* Bottom Call Controls */}
-          <div className="relative z-10 w-full max-w-sm mx-auto flex items-center justify-center gap-6 mb-6">
+          {/* Live Subtitle / Talking Caption Bar */}
+          {activeCallSubtitle && (
+            <div className="relative z-10 max-w-lg mx-auto w-full px-4 py-2.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 text-center animate-fadeIn shadow-lg">
+              <p className="text-xs sm:text-sm text-gray-100 font-medium leading-relaxed drop-shadow">
+                {activeCallSubtitle}
+              </p>
+              {isCallSpeaking && (
+                <div className="flex items-center justify-center gap-1 mt-1.5">
+                  <span className="w-1 h-3 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-4 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-2 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bottom Floating Call Controls */}
+          <div className="relative z-10 w-full max-w-sm mx-auto flex items-center justify-center gap-4 sm:gap-6 mb-4 sm:mb-8">
             <button
               onClick={() => setIsCallMuted(!isCallMuted)}
-              className={`p-4 rounded-full ${
-                isCallMuted ? 'bg-red-500 text-white' : 'bg-black/60 backdrop-blur-md text-white'
+              className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 shadow-lg ${
+                isCallMuted
+                  ? 'bg-red-500/90 text-white border border-red-400'
+                  : 'bg-black/60 backdrop-blur-md text-white border border-white/20 hover:bg-black/80'
               }`}
+              title={isCallMuted ? 'Unmute Mic' : 'Mute Mic'}
             >
-              {isCallMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              {isCallMuted ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
             </button>
 
             <button
               onClick={handleEndVideoCall}
-              className="p-5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-2xl active:scale-95 transition-transform"
+              className="p-4 sm:p-5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-2xl shadow-red-600/50 active:scale-90 transition-all border border-red-400/40"
+              title="End Video Call"
             >
-              <PhoneOff className="w-7 h-7" />
+              <PhoneOff className="w-6 h-6 sm:w-7 sm:h-7" />
             </button>
           </div>
         </div>
@@ -1527,7 +1572,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
         </div>
       )}
 
-      {/* 10. VIDEO CALL UPGRADE MODAL - ULTRA PRO EXCLUSIVE */}
+      {/* 10. VIDEO CALL UPGRADE MODAL - ULTRA PRO MAX EXCLUSIVE */}
       {isVideoUpgradeModalOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="w-full max-w-sm bg-[#0f1118] rounded-3xl border border-[#d4af37]/40 p-5 sm:p-6 text-center space-y-4 shadow-2xl animate-scaleUp">
@@ -1537,64 +1582,52 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
 
             <div className="space-y-1.5">
               <div className="inline-block px-3 py-1 rounded-full bg-[#d4af37]/20 border border-[#d4af37]/40 text-[10px] font-bold text-[#fceda7] uppercase tracking-wider">
-                {language === 'hi' ? '👑 ULTRA PRO प्लान (₹299/सप्ताह)' : '👑 ULTRA PRO PLAN (₹299/week)'}
+                {language === 'hi' ? '👑 ULTRA PRO MAX VIP (₹999/सप्ताह)' : '👑 ULTRA PRO MAX VIP (₹999/week)'}
               </div>
               <h3 className="text-lg font-bold text-white font-cinzel">
                 {language === 'hi' ? `${character.name} के साथ लाइव वीडियो कॉल` : `Live Video Call with ${character.name}`}
               </h3>
               <p className="text-xs text-gray-300 leading-relaxed">
                 {language === 'hi'
-                  ? 'लाइव फेस-टू-फेस वीडियो कॉलिंग Ultra Pro प्लान में उपलब्ध है।'
-                  : 'Live Face-to-Face Video Calling is unlocked in Ultra Pro plan.'}
+                  ? 'लाइव फेस-टू-फेस AI वीडियो कॉलिंग विशेष रूप से Ultra Pro Max VIP सदस्यों के लिए आरक्षित है।'
+                  : 'Live Face-to-Face AI Video Calling is exclusive to Ultra Pro Max VIP members.'}
               </p>
             </div>
 
             <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-[11px] text-gray-300 text-left space-y-1.5">
               <div className="flex items-center gap-1.5 text-purple-400 font-semibold">
                 <Check className="w-3.5 h-3.5 shrink-0" />
-                <span>{language === 'hi' ? '📹 रियल-टाइम फेस-टू-फेस वीडियो कॉल अनलॉक' : '📹 Face-to-Face Video Calling Unlocked'}</span>
+                <span>{language === 'hi' ? '📹 लाइव हैंडहेल्ड AI वीडियो कॉल अनलॉक' : '📹 Live Handheld AI Video Call Unlocked'}</span>
               </div>
               <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                 <Check className="w-3.5 h-3.5 shrink-0" />
-                <span>{language === 'hi' ? '📞 अनलिमिटेड 2-Way ऑडियो कॉल भी शामिल' : '📞 Unlimited Audio Calls Included'}</span>
+                <span>{language === 'hi' ? '📞 अनलिमिटेड 2-Way ऑडियो वॉइस कॉल्स' : '📞 Unlimited 2-Way Audio Voice Calls'}</span>
               </div>
               <div className="flex items-center gap-1.5 text-[#fceda7] font-semibold">
                 <Check className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
-                <span>{language === 'hi' ? 'Official Verified Blue Tick (ब्लू टिक) बैज' : 'Official Verified Blue Tick Badge'}</span>
+                <span>{language === 'hi' ? '🎭 न्यूरल फेस स्वैप वीडियो अर्ली एक्सेस' : '🎭 Neural Face Swap Video Included'}</span>
               </div>
               <div className="flex items-center gap-1.5 text-blue-400 font-semibold">
                 <Check className="w-3.5 h-3.5 shrink-0" />
-                <span>{language === 'hi' ? '24/7 Dedicated VIP कस्टमर सपोर्ट' : '24/7 Dedicated VIP Support'}</span>
+                <span>{language === 'hi' ? 'Official Verified Blue Tick (ब्लू टिक) बैज' : 'Official Verified Blue Tick Badge'}</span>
               </div>
               <div className="flex items-center gap-1.5 text-gray-300">
                 <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>{language === 'hi' ? '1,500 वीकली क्रेडिट्स (मोशन वीडियो व फ़ोटो)' : '1,500 Weekly Credits Included'}</span>
+                <span>{language === 'hi' ? '5,000 वीकली क्रेडिट्स (सभी क्रिएशन्स शामिल)' : '5,000 Weekly Credits Included'}</span>
               </div>
             </div>
 
             <div className="space-y-2 pt-1">
-              {/* Recommended ₹2 VIP Trial Entry Option */}
               <button
                 onClick={() => {
                   setIsVideoUpgradeModalOpen(false);
                   handleEndVideoCall();
                   onRouteChange('pricing');
                 }}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ffe894] via-[#d4af37] to-[#aa7c11] text-[#07080a] font-extrabold text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#ffe894] via-[#d4af37] to-[#aa7c11] text-[#07080a] font-extrabold text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 text-[#07080a]" />
-                <span>{language === 'hi' ? '2 दिन VIP ट्रायल केवल ₹2 (150 क्रेडिट्स) 🔥' : '2 Days VIP Trial ₹2 Only (150 Credits) 🔥'}</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsVideoUpgradeModalOpen(false);
-                  handleEndVideoCall();
-                  onRouteChange('pricing');
-                }}
-                className="w-full py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] border border-[#d4af37]/40 text-[#fceda7] font-bold text-xs active:scale-95 transition-all"
-              >
-                {language === 'hi' ? 'Ultra Pro प्लान में अपग्रेड करें (₹299/सप्ताह)' : 'Upgrade to Ultra Pro (₹299/week)'}
+                <span>{language === 'hi' ? 'Ultra Pro Max VIP में अपग्रेड करें (₹999/सप्ताह)' : 'Upgrade to Ultra Pro Max VIP (₹999/week)'}</span>
               </button>
 
               <button
@@ -1602,7 +1635,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
                   setIsVideoUpgradeModalOpen(false);
                   handleEndVideoCall();
                 }}
-                className="w-full py-2 rounded-xl bg-white/5 text-gray-400 hover:text-white text-xs font-semibold"
+                className="w-full py-2.5 rounded-xl bg-white/5 text-gray-400 hover:text-white text-xs font-semibold"
               >
                 {language === 'hi' ? 'कॉल बंद करें (Close Call)' : 'End Call'}
               </button>

@@ -10,8 +10,9 @@
 export interface CheckoutSessionOptions {
   planId: string;
   type: 'plan' | 'pack';
-  amount: number;
-  currency: string;
+  amount?: number;
+  currency?: string;
+  userId?: string;
   customerEmail?: string;
   customerPhone?: string;
   customerName?: string;
@@ -26,6 +27,12 @@ export interface CheckoutInitResult {
   checkoutUrl?: string;
   isTestMode?: boolean;
   providerConfigured: boolean;
+  item?: {
+    id: string;
+    name: string;
+    price: number;
+    credits: number;
+  };
   error?: string;
   message?: string;
 }
@@ -35,22 +42,75 @@ export interface PaymentVerificationOptions {
   paymentId: string;
   signature?: string;
   planId?: string;
+  type?: 'plan' | 'pack';
   userId: string;
 }
 
 export interface PaymentVerificationResult {
   verified: boolean;
   transactionId?: string;
+  orderId?: string;
   planActivated?: string;
   creditsGranted?: number;
-  status: 'captured' | 'pending' | 'failed' | 'test_activated';
+  newTotalCredits?: number;
+  isTestMode?: boolean;
+  status: 'captured' | 'pending' | 'failed' | 'test_activated' | 'pending_configuration';
   error?: string;
+  message?: string;
+}
+
+export interface PaymentGatewayConfig {
+  configured: boolean;
+  keyId: string | null;
+  mode: 'test' | 'live' | 'unconfigured';
+  currency: string;
+  message: string;
 }
 
 export interface TestActivationOptions {
   testCode: string;
   planId: string;
   userId: string;
+}
+
+/**
+ * Loads Razorpay Checkout JavaScript SDK asynchronously
+ */
+export function loadRazorpayCheckoutScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && (window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => {
+      console.warn('Failed to load Razorpay checkout.js script');
+      resolve(false);
+    };
+    document.body.appendChild(script);
+  });
+}
+
+/**
+ * Checks server payment gateway configuration status
+ */
+export async function getPaymentConfig(): Promise<PaymentGatewayConfig> {
+  try {
+    const res = await fetch('/api/payment/config');
+    if (!res.ok) throw new Error('Status ' + res.status);
+    return await res.json();
+  } catch {
+    return {
+      configured: false,
+      keyId: null,
+      mode: 'unconfigured',
+      currency: 'INR',
+      message: 'Could not fetch payment gateway config from backend.',
+    };
+  }
 }
 
 /**
@@ -72,7 +132,7 @@ export async function initializeCheckout(
     return {
       success: false,
       providerConfigured: false,
-      error: 'Payment gateway configuration pending. Live Razorpay keys required on server.',
+      error: 'Payment gateway configuration pending. Razorpay keys required on server.',
       message: 'Razorpay payment gateway adapter is ready. Live API credentials are not yet configured on the backend.',
     };
   }
