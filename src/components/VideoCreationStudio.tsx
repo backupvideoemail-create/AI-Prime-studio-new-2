@@ -19,7 +19,7 @@ import {
 import { useLanguage } from '../i18n';
 import { storageService } from '../services/storageService';
 import { checkPlanEntitlement, getRequiredPlanName, ProductFeatureKey } from '../config/entitlements';
-import { calculateEstimatedCredits } from '../config/costCatalog';
+import { calculateAuthoritativeVideoCredits } from '../config/costCatalog';
 import {
   generateTextToVideo,
   generateImageToVideo,
@@ -56,7 +56,7 @@ export const VideoCreationStudio: React.FC<VideoCreationStudioProps> = ({
   >('face_swap_video');
 
   const [prompt, setPrompt] = useState('');
-  const [duration, setDuration] = useState<5 | 10 | 15>(5);
+  const [duration, setDuration] = useState<number>(5);
   const [resolution, setResolution] = useState<'1080p' | '4k'>('1080p');
   const [sourceImage, setSourceImage] = useState<string | null>(null);
   const [sourceVideo, setSourceVideo] = useState<string | null>(null);
@@ -82,10 +82,9 @@ export const VideoCreationStudio: React.FC<VideoCreationStudioProps> = ({
   const isAllowed = checkPlanEntitlement(userTier, videoMode as ProductFeatureKey);
   const requiredPlanName = getRequiredPlanName(videoMode as ProductFeatureKey);
 
-  const estimatedCost = calculateEstimatedCredits(videoMode, {
-    durationSeconds: duration,
-    resolution,
-  });
+  // Server-authoritative calculation: duration × provider cost + 40% markup = required credits
+  const costDetails = calculateAuthoritativeVideoCredits(videoMode, duration);
+  const estimatedCost = costDetails.requiredCredits;
 
   const handleSelectTemplate = (tmpl: DynamicTemplate) => {
     if (tmpl.category === 'face_swap') {
@@ -512,46 +511,84 @@ export const VideoCreationStudio: React.FC<VideoCreationStudioProps> = ({
         </div>
 
         {/* Duration & Resolution */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
+        <div className="space-y-3 pt-1">
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 block mb-1">अवधि (Duration)</label>
-            <div className="grid grid-cols-3 gap-1">
-              {[5, 10, 15].map((d) => (
+            <div className="flex items-center justify-between text-[11px] mb-1.5">
+              <span className="font-semibold text-gray-300">अवधि चयन (Video Duration):</span>
+              <span className="text-[10px] text-[#d4af37] font-mono">
+                Min: {costDetails.minDuration}s • Max: {costDetails.maxDuration}s (Server Enforced)
+              </span>
+            </div>
+            <div className="grid grid-cols-6 gap-1.5">
+              {[3, 4, 5, 6, 7, 8].map((d) => (
                 <button
                   key={d}
-                  onClick={() => setDuration(d as any)}
-                  className={`py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                    duration === d ? 'bg-[#d4af37] text-black font-extrabold' : 'bg-white/5 text-gray-400'
+                  onClick={() => setDuration(d)}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                    duration === d
+                      ? 'bg-gradient-to-r from-[#ffe894] via-[#d4af37] to-[#aa7c11] text-[#07080a] font-extrabold shadow-md scale-[1.02]'
+                      : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   {d}s
+                  {d === 3 && <span className="block text-[8px] font-normal leading-none opacity-80">Min</span>}
+                  {d === 5 && <span className="block text-[8px] font-normal leading-none opacity-80">Std</span>}
+                  {d === 8 && <span className="block text-[8px] font-normal leading-none opacity-80">Max</span>}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 block mb-1">क्वालिटी (Quality)</label>
-            <div className="grid grid-cols-2 gap-1">
-              {['1080p', '4k'].map((r) => (
+            <label className="text-[11px] font-semibold text-gray-400 block mb-1">क्वालिटी (Quality Resolution)</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['1080p', '4k'] as const).map((r) => (
                 <button
                   key={r}
-                  onClick={() => setResolution(r as any)}
-                  className={`py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${
-                    resolution === r ? 'bg-[#d4af37] text-black font-extrabold' : 'bg-white/5 text-gray-400'
+                  onClick={() => setResolution(r)}
+                  className={`py-1.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                    resolution === r
+                      ? 'bg-[#d4af37] text-black font-extrabold shadow-sm'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
                   }`}
                 >
-                  {r}
+                  {r === '4k' ? '4K Ultra-HD' : '1080p Full HD'}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Estimated Cost Notice */}
-        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between text-xs">
-          <span className="text-gray-400">अनुमानित क्रेडिट्स (Calculated Cost):</span>
-          <span className="font-bold text-[#fceda7] font-mono">{estimatedCost} Credits</span>
+        {/* Server-Authoritative Cost Calculation Box: Duration × Actual Cost + 40% Margin = Required Credits */}
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#1c1209] to-[#0d1017] border border-[#d4af37]/40 space-y-2.5 shadow-lg">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-300 font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#d4af37]" />
+              <span>लागत गणना ({costDetails.durationSeconds}s @ ₹{costDetails.baseCostPerSec}/s):</span>
+            </span>
+            <span className="font-extrabold text-[#fceda7] font-mono text-sm sm:text-base">
+              {costDetails.requiredCredits} Credits
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/[0.08] text-[10px]">
+            <div className="p-1.5 rounded-lg bg-black/30 border border-white/5">
+              <span className="block text-gray-400 text-[9px] uppercase">Base Provider Cost</span>
+              <span className="font-semibold text-white font-mono">₹{costDetails.providerCostINR}</span>
+            </div>
+            <div className="p-1.5 rounded-lg bg-black/30 border border-white/5">
+              <span className="block text-emerald-400 text-[9px] uppercase font-semibold">Business Markup</span>
+              <span className="font-semibold text-emerald-300 font-mono">+40% (₹{costDetails.marginINR})</span>
+            </div>
+            <div className="p-1.5 rounded-lg bg-black/30 border border-white/5">
+              <span className="block text-[#d4af37] text-[9px] uppercase">Total Cost INR</span>
+              <span className="font-bold text-[#fceda7] font-mono">₹{costDetails.totalCostINR}</span>
+            </div>
+            <div className="p-1.5 rounded-lg bg-black/30 border border-white/5">
+              <span className="block text-cyan-300 text-[9px] uppercase">Required Credits</span>
+              <span className="font-extrabold text-cyan-200 font-mono">{costDetails.requiredCredits}</span>
+            </div>
+          </div>
         </div>
 
         {/* Action Button */}

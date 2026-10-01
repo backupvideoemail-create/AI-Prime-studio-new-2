@@ -30,10 +30,19 @@ export {
   createVideoSession,
   generateSpeech,
   getIndianFemaleVoice,
+  ensureVoicesLoaded,
+  requestMicPermission,
+  requestCameraPermission,
+  createMicAnalyser,
+  playAudioFromBase64,
+  blobToBase64,
+  sendVoiceTurn,
 } from './liveService';
 export type {
   AudioSessionParams,
   VideoSessionParams,
   LiveCallSessionResult,
   VoiceOptions,
+  VoiceTurnParams,
+  VoiceTurnResult,
 } from './liveService';

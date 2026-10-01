@@ -1334,12 +1334,69 @@ function generateSmartCompanionReply(
 // ============================================================================
 // MODULAR AI VIDEO GENERATION ADAPTERS (Higgsfield / Configured Provider)
 // Section 14, 16, 17 of Master Final Build Instruction
+// Dynamic Duration-Based Cost Engine with 40% Authoritative Profit Markup
 // ============================================================================
 
 const HIGGSFIELD_API_KEY = process.env.HIGGSFIELD_API_KEY || '';
 
+export const VIDEO_CONFIG = {
+  MIN_DURATION_SECONDS: 3,
+  MAX_DURATION_SECONDS: 8,
+  DEFAULT_DURATION_SECONDS: 5,
+  PROFIT_MARKUP_PERCENT: 40, // 40% business margin
+  // Base provider cost per second in INR
+  PROVIDER_COST_PER_SEC_INR: {
+    text_to_video: 12.0,   // ₹12/sec
+    image_to_video: 14.0,  // ₹14/sec
+    video_to_video: 18.0,  // ₹18/sec
+    face_swap_video: 20.0, // ₹20/sec
+  } as Record<string, number>,
+  CREDITS_PER_INR: 10,     // 10 credits = ₹1
+};
+
+export function calculateAuthoritativeVideoCost(
+  mode: string,
+  rawDurationSeconds?: number
+) {
+  const min = VIDEO_CONFIG.MIN_DURATION_SECONDS;
+  const max = VIDEO_CONFIG.MAX_DURATION_SECONDS;
+  const requested = Number(rawDurationSeconds) || VIDEO_CONFIG.DEFAULT_DURATION_SECONDS;
+
+  // Clamped duration: between min and max (enforced strictly on server!)
+  const durationSeconds = Math.max(min, Math.min(max, Math.round(requested)));
+
+  const baseCostPerSec = VIDEO_CONFIG.PROVIDER_COST_PER_SEC_INR[mode] || 14.0;
+  const providerCostINR = durationSeconds * baseCostPerSec;
+  const marginINR = providerCostINR * (VIDEO_CONFIG.PROFIT_MARKUP_PERCENT / 100);
+  const totalCostINR = providerCostINR + marginINR;
+  const requiredCredits = Math.ceil(totalCostINR * VIDEO_CONFIG.CREDITS_PER_INR);
+
+  return {
+    mode,
+    durationSeconds,
+    minDuration: min,
+    maxDuration: max,
+    baseCostPerSecINR: baseCostPerSec,
+    providerCostINR: Math.round(providerCostINR * 100) / 100,
+    markupPercent: VIDEO_CONFIG.PROFIT_MARKUP_PERCENT,
+    marginINR: Math.round(marginINR * 100) / 100,
+    totalCostINR: Math.round(totalCostINR * 100) / 100,
+    requiredCredits,
+  };
+}
+
+// Server endpoint to fetch estimated video generation cost before generation
+app.post('/api/ai/video/estimate-cost', (req: Request, res: Response) => {
+  const { mode = 'face_swap_video', durationSeconds = 5 } = req.body;
+  const cost = calculateAuthoritativeVideoCost(mode, durationSeconds);
+  return res.json({
+    success: true,
+    ...cost,
+  });
+});
+
 app.post('/api/ai/video/text-to-video', (req: Request, res: Response) => {
-  const { prompt, durationSeconds = 5, resolution = '1080p', userTier = 'Free' } = req.body;
+  const { prompt, durationSeconds = 5, resolution = '1080p', userTier = 'Free', userId = 'usr_guest' } = req.body;
   
   // Backend Entitlement Validation (Ultra Pro or Ultra Pro Max required)
   const isEligible = /ultra|vip|owner/i.test(userTier);
@@ -1352,23 +1409,44 @@ app.post('/api/ai/video/text-to-video', (req: Request, res: Response) => {
     });
   }
 
+  const costDetails = calculateAuthoritativeVideoCost('text_to_video', durationSeconds);
+  const user = getOrCreateUser(userId);
+
+  if (user.credits < costDetails.requiredCredits) {
+    return res.status(402).json({
+      success: false,
+      code: 'INSUFFICIENT_CREDITS',
+      requiredCredits: costDetails.requiredCredits,
+      availableCredits: user.credits,
+      costDetails,
+      message: `Insufficient credits. This ${costDetails.durationSeconds}s video requires ${costDetails.requiredCredits} credits (₹${costDetails.totalCostINR} with 40% margin), but you currently have ${user.credits} credits.`,
+    });
+  }
+
   if (!HIGGSFIELD_API_KEY) {
     return res.status(200).json({
       success: false,
       code: 'PROVIDER_CONFIG_PENDING',
+      costDetails,
       message: 'Higgsfield Video Generation engine is initialized. Upstream provider API credentials are pending configuration on the server. Your credits remain safe.',
     });
   }
+
+  // Deduct authoritative credits
+  user.credits -= costDetails.requiredCredits;
+
   return res.json({
     success: true,
     jobId: `vid_job_${Date.now()}`,
     status: 'queued',
+    costDetails,
+    remainingCredits: user.credits,
     message: 'Video rendering queued on provider pipeline.',
   });
 });
 
 app.post('/api/ai/video/image-to-video', (req: Request, res: Response) => {
-  const { sourceImageUrl, durationSeconds = 5, userTier = 'Free' } = req.body;
+  const { sourceImageUrl, durationSeconds = 5, userTier = 'Free', userId = 'usr_guest' } = req.body;
 
   // Backend Entitlement Validation (Ultra Pro or Ultra Pro Max required)
   const isEligible = /ultra|vip|owner/i.test(userTier);
@@ -1381,22 +1459,42 @@ app.post('/api/ai/video/image-to-video', (req: Request, res: Response) => {
     });
   }
 
+  const costDetails = calculateAuthoritativeVideoCost('image_to_video', durationSeconds);
+  const user = getOrCreateUser(userId);
+
+  if (user.credits < costDetails.requiredCredits) {
+    return res.status(402).json({
+      success: false,
+      code: 'INSUFFICIENT_CREDITS',
+      requiredCredits: costDetails.requiredCredits,
+      availableCredits: user.credits,
+      costDetails,
+      message: `Insufficient credits. This ${costDetails.durationSeconds}s video requires ${costDetails.requiredCredits} credits, but you have ${user.credits} credits.`,
+    });
+  }
+
   if (!HIGGSFIELD_API_KEY) {
     return res.status(200).json({
       success: false,
       code: 'PROVIDER_CONFIG_PENDING',
+      costDetails,
       message: 'Image-to-Video motion animation engine is initialized. Upstream provider credentials (Higgsfield) are pending server setup. Your credits are preserved.',
     });
   }
+
+  user.credits -= costDetails.requiredCredits;
+
   return res.json({
     success: true,
     jobId: `i2v_job_${Date.now()}`,
     status: 'queued',
+    costDetails,
+    remainingCredits: user.credits,
   });
 });
 
 app.post('/api/ai/video/video-to-video', (req: Request, res: Response) => {
-  const { userTier = 'Free' } = req.body;
+  const { durationSeconds = 5, userTier = 'Free', userId = 'usr_guest' } = req.body;
 
   // Backend Entitlement Validation (Ultra Pro Max exclusive)
   const isEligible = /ultra pro max|ultra-pro-max|vip|owner/i.test(userTier);
@@ -1409,22 +1507,42 @@ app.post('/api/ai/video/video-to-video', (req: Request, res: Response) => {
     });
   }
 
+  const costDetails = calculateAuthoritativeVideoCost('video_to_video', durationSeconds);
+  const user = getOrCreateUser(userId);
+
+  if (user.credits < costDetails.requiredCredits) {
+    return res.status(402).json({
+      success: false,
+      code: 'INSUFFICIENT_CREDITS',
+      requiredCredits: costDetails.requiredCredits,
+      availableCredits: user.credits,
+      costDetails,
+      message: `Insufficient credits for this ${costDetails.durationSeconds}s video.`,
+    });
+  }
+
   if (!HIGGSFIELD_API_KEY) {
     return res.status(200).json({
       success: false,
       code: 'PROVIDER_CONFIG_PENDING',
+      costDetails,
       message: 'Video-to-Video transformation pipeline is initialized. Upstream provider credentials are pending server setup. No credits were consumed.',
     });
   }
+
+  user.credits -= costDetails.requiredCredits;
+
   return res.json({
     success: true,
     jobId: `v2v_job_${Date.now()}`,
     status: 'queued',
+    costDetails,
+    remainingCredits: user.credits,
   });
 });
 
 app.post('/api/ai/video/face-swap', (req: Request, res: Response) => {
-  const { sourceVideoUrl, faceImageUrl, userTier = 'Free' } = req.body;
+  const { sourceVideoUrl, faceImageUrl, durationSeconds = 5, userTier = 'Free', userId = 'usr_guest' } = req.body;
 
   // Backend Entitlement Validation (Ultra Pro Max exclusive)
   const isEligible = /ultra pro max|ultra-pro-max|vip|owner/i.test(userTier);
@@ -1437,17 +1555,37 @@ app.post('/api/ai/video/face-swap', (req: Request, res: Response) => {
     });
   }
 
+  const costDetails = calculateAuthoritativeVideoCost('face_swap_video', durationSeconds);
+  const user = getOrCreateUser(userId);
+
+  if (user.credits < costDetails.requiredCredits) {
+    return res.status(402).json({
+      success: false,
+      code: 'INSUFFICIENT_CREDITS',
+      requiredCredits: costDetails.requiredCredits,
+      availableCredits: user.credits,
+      costDetails,
+      message: `Insufficient credits. Face-swap video (${costDetails.durationSeconds}s) requires ${costDetails.requiredCredits} credits, but you have ${user.credits} credits.`,
+    });
+  }
+
   if (!HIGGSFIELD_API_KEY && !process.env.FACESWAP_API_KEY) {
     return res.status(200).json({
       success: false,
       code: 'PROVIDER_CONFIG_PENDING',
+      costDetails,
       message: 'Neural Face-Swap Video pipeline is initialized. Upstream provider credentials (Higgsfield / FaceSwap Engine) are pending server configuration. Your credits remain safe.',
     });
   }
+
+  user.credits -= costDetails.requiredCredits;
+
   return res.json({
     success: true,
     jobId: `fswap_job_${Date.now()}`,
     status: 'queued',
+    costDetails,
+    remainingCredits: user.credits,
   });
 });
 
@@ -1455,6 +1593,32 @@ app.post('/api/ai/video/face-swap', (req: Request, res: Response) => {
 // MODULAR AUDIO & VIDEO CALLING SESSION ADAPTERS
 // Section 18, 19 of Master Final Build Instruction
 // ============================================================================
+
+function generateRealisticCallReply(characterName: string, userSaid: string): string {
+  const p = (userSaid || '').toLowerCase().trim();
+  if (!p || p.includes('hello') || p.includes('hi') || p.includes('hey') || p.includes('नमस्ते') || p.includes('हेलो')) {
+    return `हे! सुनो ना... आपकी आवाज़ सुनकर मेरा दिल सच में खुश हो गया। कैसे हो आप? सब ठीक है ना?`;
+  }
+  if (p.includes('kaisi ho') || p.includes('कैसी हो') || p.includes('how are you')) {
+    return `मैं बिल्कुल ठीक हूँ, बस आपसे बात करने का ही इंतज़ार कर रही थी... आप बताओ, आज का दिन कैसा रहा आपका?`;
+  }
+  if (p.includes('kya kar rahi') || p.includes('क्या कर रही') || p.includes('what are you doing')) {
+    return `बस आपके बारे में ही सोच रही थी, और तभी आपकी कॉल आ गई! सच में बहुत अच्छा लगा आपसे बात करके...`;
+  }
+  if (p.includes('pyaar') || p.includes('love') || p.includes('पसंद') || p.includes('miss') || p.includes('याद')) {
+    return `अरे सच में? आप इतनी प्यारी बातें करते हो ना कि मेरे चेहरे पर स्माइल आ जाती है... मुझे भी आप बहुत अच्छे लगते हो!`;
+  }
+  if (p.includes('shari') || p.includes('shayari') || p.includes('शायरी')) {
+    return `आपकी नज़रें भी क्या कमाल करती हैं, हर मुलाक़ात में दिल बेहाल करती हैं... कैसी लगी? सिर्फ आपके लिए सोची थी!`;
+  }
+  if (p.includes('kuch bolo') || p.includes('kuch sunao') || p.includes('बात करो') || p.includes('tell me')) {
+    return `हाँजी सुनो ना... आप अपनी कोई प्यारी सी बात बताओ। मुझे आपकी हर बात सुनना बहुत अच्छा लगता है!`;
+  }
+  if (p.includes('beautiful') || p.includes('khoobsurat') || p.includes('खूबसूरत') || p.includes('hot') || p.includes('pretty')) {
+    return `हाय, इतना मस्का मत लगाओ! वैसे आपकी ये बात सुनकर मुझे बहुत अच्छा लगा... थैंक यू सो मच!`;
+  }
+  return `अरे वाह! आपकी ये बात सुनकर मुझे सच में बहुत ख़ुशी हुई... और बताओ, आगे क्या सोचा है आज के लिए?`;
+}
 
 app.post('/api/ai/live/create-audio-session', (req: Request, res: Response) => {
   const { characterId, userTier = 'Free' } = req.body;
@@ -1470,7 +1634,10 @@ app.post('/api/ai/live/create-audio-session', (req: Request, res: Response) => {
   return res.json({
     sessionId: `aud_${Date.now()}`,
     status: 'connected',
-    message: 'Audio session established with Web Speech & Gemini companion.',
+    voicePitch: 1.15,
+    voiceRate: 0.93,
+    initialGreeting: 'हे! सुनो ना, आपकी आवाज़ सुनकर बहुत ख़ुशी हुई... कैसे हो आप?',
+    message: 'Audio session established with 2-Way AI Companion.',
   });
 });
 
@@ -1488,8 +1655,161 @@ app.post('/api/ai/live/create-video-session', (req: Request, res: Response) => {
   return res.json({
     sessionId: `vid_${Date.now()}`,
     status: 'connected',
-    message: 'Video call streaming channel opened.',
+    voicePitch: 1.15,
+    voiceRate: 0.93,
+    initialGreeting: 'हे! सुनो ना, आपकी वीडियो कॉल देखकर मुझे बहुत ख़ुशी हुई... कैसे हो आप?',
+    message: 'AI Avatar Video Call channel opened.',
   });
+});
+
+// Interactive 2-Way Voice Turn Endpoint for Voice and Video Calls
+app.post('/api/ai/live/voice-turn', async (req: Request, res: Response) => {
+  try {
+    const {
+      callType = 'voice', // 'voice' | 'video'
+      character,
+      userSpeechText,
+      userAudioBase64,
+      userTier = 'Free',
+      userId = 'usr_guest',
+      userEmail = '',
+      isIntroductoryTurn = false,
+    } = req.body;
+
+    // 1. Authoritative Server-side Tier Check
+    const isOwner =
+      /owner|vip/i.test(userTier) ||
+      userEmail === 'backupvideoemail@gmail.com' ||
+      userId === 'usr_owner_vip' ||
+      userId.includes('owner');
+
+    const isVideoEligible = isOwner || /ultra pro max|ultra-pro-max/i.test(userTier) || isIntroductoryTurn;
+    const isVoiceEligible = isOwner || /pro|ultra/i.test(userTier) || isIntroductoryTurn;
+
+    if (callType === 'video' && !isVideoEligible) {
+      return res.status(403).json({
+        success: false,
+        status: 'gated',
+        code: 'TIER_UPGRADE_REQUIRED',
+        planRequired: 'Ultra Pro Max (₹999/week)',
+        message: 'Live face-to-face AI Video Calling is exclusive to Ultra Pro Max.',
+      });
+    }
+
+    if (callType === 'voice' && !isVoiceEligible) {
+      return res.status(403).json({
+        success: false,
+        status: 'gated',
+        code: 'TIER_UPGRADE_REQUIRED',
+        planRequired: 'Pro (₹199/week)',
+        message: '2-Way Voice Calling requires Pro Plan or above.',
+      });
+    }
+
+    // 2. Transcribe user audio if audio blob is provided and text isn't yet extracted
+    let finalUserText = (userSpeechText || '').trim();
+    if (!finalUserText && userAudioBase64 && ai) {
+      try {
+        const transcribeRes = await ai.models.generateContent({
+          model: 'gemini-3.5-transcribe',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'audio/webm',
+                  data: userAudioBase64,
+                },
+              },
+              { text: 'Transcribe what the user said in Hindi or English accurately and concisely.' },
+            ],
+          },
+        });
+        if (transcribeRes.text) {
+          finalUserText = transcribeRes.text.trim();
+        }
+      } catch (trErr: any) {
+        console.warn('Live audio transcription notice:', trErr.message);
+      }
+    }
+
+    const characterName = character?.name || 'Priya';
+    let replyText = '';
+
+    // 3. Generate warm, charming, affectionate Indian female spoken dialogue
+    if (ai) {
+      try {
+        const callPrompt = `You are ${characterName}, a charming, gorgeous, affectionate, sweet Indian companion on a live handheld ${callType === 'video' ? 'video call' : 'voice call'} with your user.
+Personality: Sweet, caring, playful, romantic Indian girlfriend vibe, warm, attentive, natural colloquial tone.
+Rules:
+1. Speak in natural, soft, caring colloquial Hindi / Hinglish.
+2. Keep it SHORT: exactly 1 to 2 spoken sentences (maximum 20-25 words).
+3. NEVER use asterisks (like *smiles*, *laughs*, *sighs*) or emojis or markdown symbols. Speak direct spoken dialogue only.
+4. User said: "${finalUserText || 'Hello, kaise ho?'}"
+5. Respond immediately and warmly to the user.`;
+
+        const geminiRes = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [{ role: 'user', parts: [{ text: callPrompt }] }],
+          config: {
+            temperature: 0.9,
+            topP: 0.95,
+          },
+        });
+
+        if (geminiRes.text) {
+          replyText = geminiRes.text.replace(/[*_#~]/g, '').replace(/\|\|\|/g, ' ').trim();
+        }
+      } catch (aiErr: any) {
+        console.warn('Gemini live call voice reply notice:', aiErr.message);
+      }
+    }
+
+    if (!replyText) {
+      replyText = generateRealisticCallReply(characterName, finalUserText);
+    }
+
+    // 4. Optionally generate audio via Gemini TTS if configured
+    let audioBase64: string | null = null;
+    if (ai) {
+      try {
+        const ttsRes = await ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: replyText }],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
+              },
+            },
+          },
+        });
+        audioBase64 = ttsRes.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+      } catch (ttsErr: any) {
+        // Handled smoothly on client via high-tuned Indian Web Speech
+      }
+    }
+
+    return res.json({
+      success: true,
+      userText: finalUserText,
+      replyText,
+      audioBase64,
+      status: 'connected',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (turnErr: any) {
+    console.error('Live voice turn error:', turnErr);
+    return res.status(500).json({
+      success: false,
+      error: turnErr.message || 'Call turn processing failed',
+    });
+  }
 });
 
 // ============================================================================
@@ -1524,20 +1844,30 @@ const SERVER_PACKS: Record<string, CatalogItem> = {
 const processedPaymentIds = new Set<string>();
 
 function getRazorpayKeys() {
+  // Always inspect .env fresh from disk to capture runtime additions without server restart
   try {
     const envPath = path.resolve(process.cwd(), '.env');
     if (fs.existsSync(envPath)) {
       const envContent = fs.readFileSync(envPath, 'utf-8');
       const parsed = dotenv.parse(envContent);
-      if (parsed.RAZORPAY_KEY_ID) process.env.RAZORPAY_KEY_ID = parsed.RAZORPAY_KEY_ID;
-      if (parsed.RAZORPAY_KEY_SECRET) process.env.RAZORPAY_KEY_SECRET = parsed.RAZORPAY_KEY_SECRET;
+      if (parsed.RAZORPAY_KEY_ID) {
+        process.env.RAZORPAY_KEY_ID = parsed.RAZORPAY_KEY_ID.trim();
+      }
+      if (parsed.RAZORPAY_KEY_SECRET) {
+        process.env.RAZORPAY_KEY_SECRET = parsed.RAZORPAY_KEY_SECRET.trim();
+      }
     }
   } catch {
     // ignore
   }
 
-  const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
-  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+  let keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+  let keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+
+  // Strip accidental quotes if user wrapped them in quotes in .env
+  keyId = keyId.replace(/^['"]|['"]$/g, '').trim();
+  keySecret = keySecret.replace(/^['"]|['"]$/g, '').trim();
+
   const isPlaceholder =
     !keyId ||
     !keySecret ||

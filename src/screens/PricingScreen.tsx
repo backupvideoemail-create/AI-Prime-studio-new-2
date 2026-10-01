@@ -70,12 +70,15 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({ onRouteChange, cre
     getPaymentConfig().then((cfg) => {
       setPaymentConfig(cfg);
     });
-  }, []);
+  }, [checkoutModal]);
 
   const handleOpenCheckout = (item: PlanConfig | CreditPack, type: 'plan' | 'pack') => {
     setGatewayError(null);
     setTestCodeStatus(null);
     setShowTestCodeInput(false);
+    getPaymentConfig().then((cfg) => {
+      setPaymentConfig(cfg);
+    });
     setCheckoutModal({ type, item });
   };
 

@@ -152,6 +152,41 @@ export const COST_CATALOG: Record<string, CostItem> = {
 };
 
 /**
+ * Calculates authoritative video credits based strictly on duration × provider cost + 40% markup
+ * Server & Client Synchronized Calculation
+ */
+export function calculateAuthoritativeVideoCredits(
+  mode: string,
+  rawDurationSeconds: number = 5
+) {
+  const min = 3;
+  const max = 8;
+  const durationSeconds = Math.max(min, Math.min(max, Math.round(rawDurationSeconds || 5)));
+  const costPerSecMap: Record<string, number> = {
+    text_to_video: 12.0,
+    image_to_video: 14.0,
+    video_to_video: 18.0,
+    face_swap_video: 20.0,
+  };
+  const baseCostPerSec = costPerSecMap[mode] || 14.0;
+  const providerCostINR = durationSeconds * baseCostPerSec;
+  const marginINR = providerCostINR * DEFAULT_BUSINESS_MARKUP; // 40% markup
+  const totalCostINR = providerCostINR + marginINR;
+  const requiredCredits = Math.ceil(totalCostINR * 10); // 10 credits per INR
+
+  return {
+    durationSeconds,
+    minDuration: min,
+    maxDuration: max,
+    baseCostPerSec,
+    providerCostINR: Math.round(providerCostINR * 100) / 100,
+    marginINR: Math.round(marginINR * 100) / 100,
+    totalCostINR: Math.round(totalCostINR * 100) / 100,
+    requiredCredits,
+  };
+}
+
+/**
  * Calculates required credits with configured business markup
  */
 export function calculateEstimatedCredits(
@@ -161,6 +196,15 @@ export function calculateEstimatedCredits(
     resolution?: string;
   }
 ): number {
+  if (
+    featureKey === 'text_to_video' ||
+    featureKey === 'image_to_video' ||
+    featureKey === 'video_to_video' ||
+    featureKey === 'face_swap_video'
+  ) {
+    return calculateAuthoritativeVideoCredits(featureKey, options?.durationSeconds || 5).requiredCredits;
+  }
+
   const item = COST_CATALOG[featureKey];
   if (!item) return BASE_CREDITS_PER_IMAGE;
 

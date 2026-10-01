@@ -10,7 +10,16 @@ import { CHARACTERS } from '../data/characters';
 import { generateChat } from '../services/ai/chatService';
 import { storageService } from '../services/storageService';
 import { canAccessVoiceCall, canAccessVideoCall } from '../config/plans';
-import { generateSpeech } from '../services/ai/liveService';
+import {
+  generateSpeech,
+  requestMicPermission,
+  requestCameraPermission,
+  createMicAnalyser,
+  playAudioFromBase64,
+  blobToBase64,
+  sendVoiceTurn,
+  ensureVoicesLoaded,
+} from '../services/ai/liveService';
 import { AuthModal } from '../components/modals/AuthModal';
 import { AgeVerificationModal } from '../components/modals/AgeVerificationModal';
 import {
@@ -116,8 +125,15 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
   const [activeCallSubtitle, setActiveCallSubtitle] = useState<string>('');
   const [isCallListening, setIsCallListening] = useState<boolean>(false);
   const [isCallSpeaking, setIsCallSpeaking] = useState<boolean>(false);
+  const [micVolume, setMicVolume] = useState<number>(0);
+  const [userCameraActive, setUserCameraActive] = useState<boolean>(false);
   const [selectedGalleryPhoto, setSelectedGalleryPhoto] = useState<{ url: string; title: string; style: string } | null>(null);
   const callRecognitionRef = useRef<any>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micAnalyserCleanupRef = useRef<(() => void) | null>(null);
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pipStreamRef = useRef<MediaStream | null>(null);
+  const audioVolumeAnimRef = useRef<number | null>(null);
 
   // File upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -130,7 +146,28 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
   const isFav = favorites.includes(character.id);
   const isFollow = following.includes(character.id);
 
-  // Stop audio on unmount
+  const stopAllMediaStreams = () => {
+    if (audioVolumeAnimRef.current) {
+      cancelAnimationFrame(audioVolumeAnimRef.current);
+      audioVolumeAnimRef.current = null;
+    }
+    if (micAnalyserCleanupRef.current) {
+      micAnalyserCleanupRef.current();
+      micAnalyserCleanupRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    }
+    if (pipStreamRef.current) {
+      pipStreamRef.current.getTracks().forEach((t) => t.stop());
+      pipStreamRef.current = null;
+    }
+    setUserCameraActive(false);
+    setMicVolume(0);
+  };
+
+  // Stop audio and media on unmount
   useEffect(() => {
     return () => {
       if ('speechSynthesis' in window) {
@@ -139,6 +176,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
       try {
         callRecognitionRef.current?.stop();
       } catch {}
+      stopAllMediaStreams();
     };
   }, []);
 
@@ -217,13 +255,60 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
     });
   };
 
-  // Dynamic voice call multi-turn loop (eliminates repeating one line)
-  const startListeningToUserInCall = () => {
+  // Dynamic voice call multi-turn loop (2-way live microphone + AI voice reply)
+  const initMicrophoneStream = async () => {
+    try {
+      const stream = await requestMicPermission();
+      if (stream) {
+        micStreamRef.current = stream;
+        const analyser = createMicAnalyser(stream);
+        micAnalyserCleanupRef.current = analyser.cleanup;
+
+        const checkVolume = () => {
+          const vol = analyser.getVolume();
+          setMicVolume(vol);
+          audioVolumeAnimRef.current = requestAnimationFrame(checkVolume);
+        };
+        audioVolumeAnimRef.current = requestAnimationFrame(checkVolume);
+      }
+    } catch (e) {
+      console.warn('Microphone stream notice:', e);
+    }
+  };
+
+  const startPipCamera = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+        audio: false,
+      });
+      pipStreamRef.current = camStream;
+      if (pipVideoRef.current) {
+        pipVideoRef.current.srcObject = camStream;
+      }
+      setUserCameraActive(true);
+    } catch {
+      setUserCameraActive(false);
+    }
+  };
+
+  const startListeningToUserInCall = (callType: 'voice' | 'video' = isVideoCalling ? 'video' : 'voice') => {
+    if (isCallMuted) {
+      setIsCallListening(false);
+      return;
+    }
+
     const SpeechRec =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRec) {
-      setIsCallListening(false);
+      setIsCallListening(true);
+      setActiveCallSubtitle(
+        language === 'hi'
+          ? '🎤 माइक सक्रिय है — बोलें या नीचे टैप करें...'
+          : '🎤 Microphone active — Speak or tap below...'
+      );
       return;
     }
 
@@ -235,7 +320,9 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
 
       recognition.onstart = () => {
         setIsCallListening(true);
-        setActiveCallSubtitle(language === 'hi' ? '🎤 बोलिए, मैं सुन रही हूँ...' : '🎤 Listening to you, speak now...');
+        setActiveCallSubtitle(
+          language === 'hi' ? '🎤 बोलिए, मैं सुन रही हूँ...' : '🎤 Listening to you, speak now...'
+        );
       };
 
       recognition.onresult = async (event: any) => {
@@ -244,7 +331,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
 
         setIsCallListening(false);
         setActiveCallSubtitle(`You: "${transcript}"`);
-        await handleCharacterDynamicCallReply(transcript);
+        await handleCharacterDynamicCallReply(transcript, callType);
       };
 
       recognition.onerror = () => {
@@ -262,39 +349,79 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
     }
   };
 
-  const handleCharacterDynamicCallReply = async (userSaid: string) => {
+  const handleCharacterDynamicCallReply = async (
+    userSaid: string,
+    callType: 'voice' | 'video' = isVideoCalling ? 'video' : 'voice'
+  ) => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    try {
+      callRecognitionRef.current?.stop();
+    } catch {}
+
+    setIsCallListening(false);
     setIsCallSpeaking(true);
     setActiveCallSubtitle(`${character.name} सोच रही है...`);
 
-    const result = await generateChat({
+    // 1. Send turn to authoritative server endpoint
+    const result = await sendVoiceTurn({
+      callType,
       character,
-      messages,
-      userPrompt: `In live voice call, reply warmly and naturally as ${character.name} in 1-2 short conversational Hindi sentences to user saying: "${userSaid}"`,
+      userSpeechText: userSaid,
+      userTier: currentUserProfile.membershipTier || 'Free',
+      userId: currentUserProfile.id || 'usr_guest',
     });
 
+    if (result.status === 'gated' || result.code === 'TIER_UPGRADE_REQUIRED') {
+      setIsCallSpeaking(false);
+      stopAllMediaStreams();
+      if (callType === 'video') {
+        setIsVideoCalling(false);
+        setIsVideoUpgradeModalOpen(true);
+      } else {
+        setIsVoiceCalling(false);
+        setIsVoiceUpgradeModalOpen(true);
+      }
+      return;
+    }
+
     const reply =
-      result.success && result.text
-        ? result.text.replace(/\|\|\|/g, ' ')
-        : 'Arey wah! Sunke bohot accha laga... Aur batao aaj ka din kaisa tha?';
+      result.replyText ||
+      (language === 'hi'
+        ? 'हे! सुनो ना... आपकी आवाज़ सुनकर बहुत ख़ुशी हुई। कैसे हो आप?'
+        : 'Hey! Suno na... Aapki awaaz sunkar bohot achha lag raha hai!');
 
     setActiveCallSubtitle(`${character.name}: "${reply}"`);
-    await generateSpeech(reply);
+
+    // 2. Play Audio: prioritize Gemini TTS audio stream, fall back to tuned soft Indian female voice
+    let played = false;
+    if (result.audioBase64) {
+      played = await playAudioFromBase64(result.audioBase64);
+    }
+    if (!played) {
+      await generateSpeech(reply, { pitch: 1.15, rate: 0.92 });
+    }
+
     setIsCallSpeaking(false);
 
-    // Auto resume listening after AI finishes speaking
+    // 3. Auto resume listening after AI finishes speaking
     setTimeout(() => {
-      startListeningToUserInCall();
+      if ((isVoiceCalling || isVideoCalling) && !isCallMuted) {
+        startListeningToUserInCall(callType);
+      }
     }, 600);
   };
 
-  const handleQuickCallPrompt = async (promptText: string) => {
+  const handleQuickCallPrompt = async (
+    promptText: string,
+    callType: 'voice' | 'video' = isVideoCalling ? 'video' : 'voice'
+  ) => {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     try {
       callRecognitionRef.current?.stop();
     } catch {}
     setIsCallListening(false);
     setActiveCallSubtitle(`You: "${promptText}"`);
-    await handleCharacterDynamicCallReply(promptText);
+    await handleCharacterDynamicCallReply(promptText, callType);
   };
 
   // Pre-call: Checks auth, then opens 18+ Mature Content verification popup
@@ -332,15 +459,16 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
     setTimeout(async () => {
       setCallStatus('connected');
       if (hasVoiceAccess) {
+        await initMicrophoneStream();
         const initialGreeting = language === 'hi'
-          ? `हे! सुनो ना, आपसे बात करके बहुत अच्छा लग रहा है...`
-          : `Hey! Suno na, aapse baat karke bohot achha lag raha hai...`;
+          ? `हे! सुनो ना, आपकी आवाज़ सुनकर बहुत ख़ुशी हुई... कैसे हो आप?`
+          : `Hey! Suno na, aapse baat karke bohot achha lag raha hai... Kaise ho?`;
         setActiveCallSubtitle(`${character.name}: "${initialGreeting}"`);
         setIsCallSpeaking(true);
-        await generateSpeech(initialGreeting);
+        await generateSpeech(initialGreeting, { pitch: 1.15, rate: 0.92 });
         setIsCallSpeaking(false);
         setTimeout(() => {
-          startListeningToUserInCall();
+          startListeningToUserInCall('voice');
         }, 500);
       } else {
         // Zero free demo! Connects for 1.5 - 2 seconds, then immediately pauses and shows VIP upgrade popup
@@ -350,6 +478,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
           try {
             callRecognitionRef.current?.stop();
           } catch {}
+          stopAllMediaStreams();
           setIsVoiceCalling(false);
           setIsVoiceUpgradeModalOpen(true);
         }, 1500);
@@ -363,12 +492,27 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
     setIsVideoCalling(true);
     setCallStatus('ringing');
     setCallDuration(0);
+    setActiveCallSubtitle(`Starting Video Call with ${character.name}...`);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       setCallStatus('connected');
-      if (!hasVideoAccess) {
+      if (hasVideoAccess) {
+        await initMicrophoneStream();
+        startPipCamera();
+        const initialGreeting = language === 'hi'
+          ? `हे! सुनो ना, आपकी वीडियो कॉल देखकर मुझे बहुत ख़ुशी हुई... कैसे हो आप?`
+          : `Hey! Suno na, video call par aapko dekhkar kitna achha lag raha hai... Kaise ho?`;
+        setActiveCallSubtitle(`${character.name}: "${initialGreeting}"`);
+        setIsCallSpeaking(true);
+        await generateSpeech(initialGreeting, { pitch: 1.15, rate: 0.92 });
+        setIsCallSpeaking(false);
+        setTimeout(() => {
+          startListeningToUserInCall('video');
+        }, 500);
+      } else {
         // Zero free demo! Connects for 1.5 - 2 seconds, then immediately closes and shows upgrade popup
         setTimeout(() => {
+          stopAllMediaStreams();
           setIsVideoCalling(false);
           setIsVideoUpgradeModalOpen(true);
         }, 1500);
@@ -383,6 +527,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
     try {
       callRecognitionRef.current?.stop();
     } catch {}
+    stopAllMediaStreams();
     setIsVoiceCalling(false);
     setIsCallSpeaking(false);
     setIsCallListening(false);
@@ -399,7 +544,16 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
   };
 
   const handleEndVideoCall = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    try {
+      callRecognitionRef.current?.stop();
+    } catch {}
+    stopAllMediaStreams();
     setIsVideoCalling(false);
+    setIsCallSpeaking(false);
+    setIsCallListening(false);
     const durStr = formatTimer(callDuration);
     const endMsg: ChatMessage = {
       id: `vcall_${Date.now()}`,
@@ -1323,6 +1477,19 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
               </div>
             )}
 
+            {/* Live User Mic Volume Wave when User is listening/speaking */}
+            {!isCallSpeaking && (
+              <div className="flex items-center justify-center gap-2 text-[10px] text-emerald-300 pt-0.5">
+                <span>🎤 Your Voice:</span>
+                <div className="w-28 h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 transition-all duration-75"
+                    style={{ width: `${Math.min(100, Math.max(6, micVolume * 2.2))}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Quick Interactive Spoken Topic Chips */}
             {callStatus === 'connected' && (
               <div className="space-y-1.5 text-center">
@@ -1338,7 +1505,7 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
                   ].map((topic, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleQuickCallPrompt(topic)}
+                      onClick={() => handleQuickCallPrompt(topic, 'voice')}
                       className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-[#00a884]/30 border border-white/15 text-[11px] text-gray-200 hover:text-white transition-all active:scale-95"
                     >
                       {topic}
@@ -1350,8 +1517,8 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
           </div>
 
           {/* Bottom Action Controls */}
-          <div className="w-full max-w-xs space-y-5 mb-4">
-            <div className="flex items-center justify-around">
+          <div className="w-full max-w-xs space-y-4 mb-4">
+            <div className="flex items-center justify-around gap-2">
               <button
                 onClick={() => {
                   if (isCallListening) {
@@ -1360,25 +1527,41 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
                     setIsCallMuted(true);
                   } else {
                     setIsCallMuted(false);
-                    startListeningToUserInCall();
+                    startListeningToUserInCall('voice');
                   }
                 }}
-                className={`p-4 rounded-full transition-colors ${
+                className={`p-3.5 rounded-full transition-colors ${
                   isCallMuted ? 'bg-red-500 text-white' : 'bg-white/10 hover:bg-white/20 text-gray-200'
                 }`}
                 title={isCallMuted ? 'Unmute Mic' : 'Mute Mic'}
               >
-                {isCallMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                {isCallMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
+
+              {/* Tap to speak action button */}
+              <button
+                onClick={() => {
+                  if (isCallSpeaking) {
+                    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                    setIsCallSpeaking(false);
+                  }
+                  startListeningToUserInCall('voice');
+                }}
+                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-[#00a884] text-white font-bold text-xs shadow-xl active:scale-95 transition-all flex items-center gap-1.5 border border-emerald-400/40"
+                title="Speak to AI"
+              >
+                <Mic className="w-4 h-4 text-white" />
+                <span>{language === 'hi' ? 'बोलिए (Speak)' : 'Speak'}</span>
               </button>
 
               <button
                 onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-                className={`p-4 rounded-full transition-colors ${
+                className={`p-3.5 rounded-full transition-colors ${
                   isSpeakerOn ? 'bg-[#00a884] text-white' : 'bg-white/10 text-gray-200'
                 }`}
                 title="Speaker"
               >
-                {isSpeakerOn ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
+                {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
             </div>
 
@@ -1416,14 +1599,14 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
             )}
           </div>
 
-          {/* Top Bar with Real Video Call HUD */}
+          {/* Top Bar with Real Video Call HUD (Honest, authentic technical labels) */}
           <div className="relative z-10 flex items-start justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 <h3 className="font-bold text-lg sm:text-xl font-cinzel drop-shadow-md">{character.name}</h3>
-                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[9px] font-bold text-emerald-300 uppercase tracking-wider">
-                  Live
+                <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[9px] font-bold text-emerald-300 uppercase tracking-wider">
+                  AI Avatar Call
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-300 drop-shadow">
@@ -1431,45 +1614,96 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
                   {callStatus === 'ringing' ? 'Connecting...' : formatTimer(callDuration)}
                 </span>
                 <span>•</span>
-                <span className="text-[10px] text-gray-400">1080p HD • 60fps</span>
+                <span className="text-[10px] text-gray-300">HD Avatar • 2-Way Voice</span>
                 <span>•</span>
-                <span className="text-[10px] text-emerald-400">End-to-End Encrypted</span>
+                <span className="text-[10px] text-emerald-400">Secure Session</span>
               </div>
             </div>
 
-            {/* Self PIP View (User Front Camera Simulation) */}
+            {/* Self PIP View (User Front Camera / Avatar) */}
             <div className="w-24 sm:w-28 h-32 sm:h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl bg-black/80 backdrop-blur-md relative group">
-              <img
-                src={userProfile.avatar}
-                alt="You"
-                className="w-full h-full object-cover transform -scale-x-100"
-              />
-              <div className="absolute bottom-1 right-1.5 px-1 rounded bg-black/60 text-[8px] text-gray-300">
-                You
+              {userCameraActive ? (
+                <video
+                  ref={pipVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover transform -scale-x-100"
+                />
+              ) : (
+                <img
+                  src={userProfile.avatar}
+                  alt="You"
+                  className="w-full h-full object-cover transform -scale-x-100"
+                />
+              )}
+              <div className="absolute bottom-1 right-1.5 px-1.5 py-0.5 rounded bg-black/70 text-[8px] text-gray-200 flex items-center gap-1">
+                <span>You</span>
+                {micVolume > 15 && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />}
               </div>
             </div>
           </div>
 
-          {/* Live Subtitle / Talking Caption Bar */}
-          {activeCallSubtitle && (
-            <div className="relative z-10 max-w-lg mx-auto w-full px-4 py-2.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 text-center animate-fadeIn shadow-lg">
-              <p className="text-xs sm:text-sm text-gray-100 font-medium leading-relaxed drop-shadow">
-                {activeCallSubtitle}
-              </p>
-              {isCallSpeaking && (
-                <div className="flex items-center justify-center gap-1 mt-1.5">
-                  <span className="w-1 h-3 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1 h-4 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1 h-2 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          {/* Live Subtitle / Talking Caption Bar & Volume Visualizer */}
+          <div className="relative z-10 max-w-lg mx-auto w-full px-4 py-3 rounded-2xl bg-black/75 backdrop-blur-md border border-white/10 text-center animate-fadeIn shadow-2xl space-y-2">
+            <p className="text-xs sm:text-sm text-gray-100 font-medium leading-relaxed drop-shadow">
+              {activeCallSubtitle || (language === 'hi' ? '🎤 बोलिए, मैं सुन रही हूँ...' : '🎤 Listening, speak now...')}
+            </p>
+
+            {/* Speaking animation when AI is talking */}
+            {isCallSpeaking && (
+              <div className="flex items-center justify-center gap-1 mt-1">
+                <span className="w-1 h-3 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-4 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-2 bg-[#00a884] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            )}
+
+            {/* Live User Mic Volume Wave when User is listening/speaking */}
+            {!isCallSpeaking && (
+              <div className="flex items-center justify-center gap-2 text-[10px] text-emerald-300 pt-0.5">
+                <span>🎤 Your Voice:</span>
+                <div className="w-28 h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 transition-all duration-75"
+                    style={{ width: `${Math.min(100, Math.max(6, micVolume * 2.2))}%` }}
+                  />
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Quick interactive talk chips in Video Call so user can easily talk or tap */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1.5 border-t border-white/10">
+              {[
+                language === 'hi' ? 'कैसी हो तुम?' : 'How are you?',
+                language === 'hi' ? 'क्या कर रही हो?' : 'What are you doing?',
+                language === 'hi' ? 'मुझसे बात करो' : 'Talk with me',
+                language === 'hi' ? 'एक प्यारी शायरी सुनाओ' : 'Tell a sweet Shayari',
+              ].map((topic, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleQuickCallPrompt(topic, 'video')}
+                  className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-[#00a884]/40 border border-white/15 text-[10px] text-gray-200 hover:text-white transition-all active:scale-95"
+                >
+                  {topic}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Bottom Floating Call Controls */}
-          <div className="relative z-10 w-full max-w-sm mx-auto flex items-center justify-center gap-4 sm:gap-6 mb-4 sm:mb-8">
+          <div className="relative z-10 w-full max-w-sm mx-auto flex items-center justify-center gap-3 sm:gap-5 mb-4 sm:mb-8">
             <button
-              onClick={() => setIsCallMuted(!isCallMuted)}
+              onClick={() => {
+                if (isCallListening) {
+                  try { callRecognitionRef.current?.stop(); } catch {}
+                  setIsCallListening(false);
+                  setIsCallMuted(true);
+                } else {
+                  setIsCallMuted(false);
+                  startListeningToUserInCall('video');
+                }
+              }}
               className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 shadow-lg ${
                 isCallMuted
                   ? 'bg-red-500/90 text-white border border-red-400'
@@ -1478,6 +1712,22 @@ export const CharacterDetailScreen: React.FC<CharacterDetailScreenProps> = ({
               title={isCallMuted ? 'Unmute Mic' : 'Mute Mic'}
             >
               {isCallMuted ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
+            </button>
+
+            {/* Tap-to-Talk Direct Action Button */}
+            <button
+              onClick={() => {
+                if (isCallSpeaking) {
+                  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                  setIsCallSpeaking(false);
+                }
+                startListeningToUserInCall('video');
+              }}
+              className="px-4 py-3 rounded-full bg-gradient-to-r from-emerald-600 to-[#00a884] text-white font-bold text-xs shadow-xl active:scale-95 transition-all flex items-center gap-1.5 border border-emerald-400/40"
+              title="Speak to AI"
+            >
+              <Mic className="w-4 h-4 text-white" />
+              <span>{language === 'hi' ? 'बोलिए (Tap to Speak)' : 'Tap to Speak'}</span>
             </button>
 
             <button
